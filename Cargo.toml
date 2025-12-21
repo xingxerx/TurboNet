@@ -1,3 +1,13 @@
+[package]
+name = "turbonet"
+version = "0.1.0"
+edition = "2021"
+
 [dependencies]
-cudarc = "0.11" # Rust wrapper for CUDA
-tokio = { version = "1", features = ["full"] } # Async networking
+cudarc = { version = "0.11", features = ["cuda-12010", "nvrtc", "driver"] }
+tokio = { version = "1", features = ["full"] }
+network-interface = "1.1"
+
+# This tells Cargo to automatically find all your scripts in src/bin/
+[lib]
+path = "src/lib.rs"
