@@ -53,10 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let p1_port = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string());
     let p2_port = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string());
     let p3_port = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string());
-    
-    let w0: i32 = std::env::var("SHRED_W0").unwrap_or_else(|_| "10".to_string()).parse().unwrap();
-    let w1: i32 = std::env::var("SHRED_W1").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
-    let w2: i32 = std::env::var("SHRED_W2").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
     let block_size: usize = std::env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
 
     let l1 = UdpSocket::bind(format!("0.0.0.0:{}", p1_port)).await?;
@@ -64,12 +60,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let l3 = UdpSocket::bind(format!("0.0.0.0:{}", p3_port)).await?;
 
     let total_blocks = (total_expected + block_size - 1) / block_size;
-    
     let _ = std::fs::remove_file("reborn_image.jpg");
-    let mut output_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open("reborn_image.jpg")?;
+    let mut output_file = OpenOptions::new().create(true).write(true).open("reborn_image.jpg")?;
 
     let multiprogress = MultiProgress::new();
     let sty = ProgressStyle::default_bar()
@@ -88,18 +80,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pb3.set_style(sty);
     pb3.set_prefix("⚡ 5GHz-2 ");
 
-    async fn collect_lane_data(s: &UdpSocket, expected_salt: u64, expected_b: u32, target: usize, pb: &ProgressBar) -> Vec<u8> {
-        let mut buf = [0u8; 16];
+    async fn collect_lane_data(s: &UdpSocket, expected_salt: u64, expected_b: u32, pb: &ProgressBar) -> (Vec<u8>, usize, i32, i32, i32) {
+        let mut buf = [0u8; 1024];
+        let mut target_enc_n = 0;
+        let (mut w0, mut w1, mut w2) = (0, 0, 0);
+
         loop {
-            let (len, _) = s.recv_from(&mut buf).await.unwrap();
-            if len == 16 {
+            let (len, addr) = s.recv_from(&mut buf).await.unwrap();
+            if len >= 16 {
                 let s_val = u64::from_be_bytes(buf[0..8].try_into().unwrap());
                 let b_val = u32::from_be_bytes(buf[8..12].try_into().unwrap());
+                
+                if s_val == 0xFFFFFFFFFFFFFFFF {
+                    let _ = s.send_to(&buf[..len], addr).await;
+                    continue; 
+                }
+
                 if s_val == expected_salt && b_val == expected_b {
+                    if len >= 28 {
+                        target_enc_n = u32::from_be_bytes(buf[12..16].try_into().unwrap()) as usize;
+                        w0 = u32::from_be_bytes(buf[16..20].try_into().unwrap()) as i32;
+                        w1 = u32::from_be_bytes(buf[20..24].try_into().unwrap()) as i32;
+                        w2 = u32::from_be_bytes(buf[24..28].try_into().unwrap()) as i32;
+                    }
                     break; 
                 }
             }
         }
+        
+        let lane_id = match pb.prefix().contains("2.4") { true => 0, false => if pb.prefix().contains("-1") {1} else {2} };
+        let target = get_lane_len_asymmetric(target_enc_n, expected_salt, w0, w1, w2, lane_id);
+        
         pb.set_length(target as u64);
         pb.set_position(0);
         let mut data = vec![0u8; target];
@@ -112,27 +123,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rx = end;
             pb.set_position(rx as u64);
         }
-        data
+        (data, target_enc_n, w0, w1, w2)
     }
 
     for block_idx in 0..total_blocks {
-        let mut current_block_raw_size = if block_idx == total_blocks - 1 {
-            total_expected % block_size
-        } else {
-            block_size
-        };
-        if current_block_raw_size == 0 { current_block_raw_size = block_size; }
-        let current_enc_n = current_block_raw_size + 16;
-
-        let len0 = get_lane_len_asymmetric(current_enc_n, salt, w0, w1, w2, 0);
-        let len1 = get_lane_len_asymmetric(current_enc_n, salt, w0, w1, w2, 1);
-        let len2 = get_lane_len_asymmetric(current_enc_n, salt, w0, w1, w2, 2);
-
-        let (d0, d1, d2) = tokio::join!(
-            collect_lane_data(&l1, salt, block_idx as u32, len0, &pb1),
-            collect_lane_data(&l2, salt, block_idx as u32, len1, &pb2),
-            collect_lane_data(&l3, salt, block_idx as u32, len2, &pb3),
+        let (r1, r2, r3) = tokio::join!(
+            collect_lane_data(&l1, salt, block_idx as u32, &pb1),
+            collect_lane_data(&l2, salt, block_idx as u32, &pb2),
+            collect_lane_data(&l3, salt, block_idx as u32, &pb3),
         );
+        
+        let (d0, current_enc_n, w0, w1, w2) = r1;
+        let (d1, _, _, _, _) = r2;
+        let (d2, _, _, _, _) = r3;
 
         let mut re = vec![0u8; current_enc_n];
         let w_total = (w0 + w1 + w2) as u64;

@@ -12,7 +12,3 @@ aes-gcm = "0.10"
 aead = "0.5"
 dotenvy = "0.15"
 indicatif = "0.17"
-
-# This tells Cargo to automatically find all your scripts in src/bin/
-[lib]
-path = "src/lib.rs"
