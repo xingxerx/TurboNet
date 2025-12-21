@@ -113,20 +113,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
     println!("✅ SUCCESS: Quantum Handshake complete. Shared Secret derived.");
 
-    println!("📦 LATTICE: Waiting for Payload Metadata...");
-    let mut m_buf = [0u8; 2048];
-    let (_, _) = l1.recv_from(&mut m_buf).await?;
-    let (filename, total_expected) = if m_buf[0] == b'M' {
-        let f_len = u32::from_be_bytes(m_buf[1..5].try_into().unwrap()) as usize;
-        let name = String::from_utf8_lossy(&m_buf[5..5+f_len]).to_string();
-        let size = u64::from_be_bytes(m_buf[5+f_len..5+f_len+8].try_into().unwrap()) as usize;
-        (name, size)
-    } else {
-        ("unknown_payload.bin".to_string(), total_expected_arg)
+    println!("📦 LATTICE: Waiting for Payload Metadata (Level 11)...");
+    let (filename, total_expected) = loop {
+        let mut m_buf = [0u8; 2048];
+        let (len, addr) = l1.recv_from(&mut m_buf).await?;
+        if len > 0 && m_buf[0] == b'M' {
+            let f_len = u32::from_be_bytes(m_buf[1..5].try_into().unwrap()) as usize;
+            let name = String::from_utf8_lossy(&m_buf[5..5+f_len]).to_string();
+            let size = u64::from_be_bytes(m_buf[5+f_len..5+f_len+8].try_into().unwrap()) as usize;
+            
+            // Send META_ACK to confirm reception
+            let ack_msg = format!("META_ACK:{}", size);
+            for _ in 0..5 {
+                let _ = l1.send_to(ack_msg.as_bytes(), addr).await;
+            }
+            
+            println!("🎯 TARGET IDENTIFIED: {} ({} bytes)", name, size);
+            break (name, size);
+        }
+        // Fail-safe for standard handshake
+        if len > 0 && m_buf[0] != b'M' && total_expected_arg > 0 {
+             break ("unknown_payload.bin".to_string(), total_expected_arg);
+        }
     };
 
-    println!("🎯 TARGET IDENTIFIED: {} ({} bytes)", filename, total_expected);
-    
     let total_blocks = (total_expected + block_size - 1) / block_size;
     let out_name = format!("reborn_{}", filename);
     let _ = std::fs::remove_file(&out_name);
@@ -134,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let multiprogress = MultiProgress::new();
     let sty = ProgressStyle::default_bar()
-        .template("{prefix:.bold}▕{bar:40.cyan/blue}▏{pos}/{len} ({percent}%)")?
+        .template("{prefix:.bold}▕{bar:40.cyan/blue}▏{pos}/{len} ({percent}%) {msg}")?
         .progress_chars("█▉▊▋▌▍▎▏  ");
 
     let pb1 = multiprogress.add(ProgressBar::new(0)); pb1.set_style(sty.clone()); pb1.set_prefix("📡 2.4GHz ");

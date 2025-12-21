@@ -128,11 +128,11 @@ fn get_lane_len_asymmetric(n: usize, salt: u64, w0: i32, w1: i32, w2: i32, lane:
 
 async fn blast_lane_gui(s: &UdpSocket, data: &[u8], port: u16, target_ip: &str, head: &[u8]) {
     let _ = s.send_to(head, format!("{}:{}", target_ip, port)).await;
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    for chunk in data.chunks(1024) {
+    // Bandwidth Beast: No sleep after header, just a yield
+    tokio::task::yield_now().await;
+    for chunk in data.chunks(1400) { // Increased chunk size for MTU efficiency
         let _ = s.send_to(chunk, format!("{}:{}", target_ip, port)).await;
-        // High-speed burst with minimal delay
-        tokio::task::yield_now().await;
+        // High-speed burst with zero delay
     }
 }
 
@@ -184,13 +184,26 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
     
     let _ = tx.send(MissionEvent::HandshakeComplete).await;
 
-    // Level 11 METADATA: Send filename and total size
+    // Level 11 METADATA: Robust Handshake
     let mut meta = vec![b'M'];
     let fname = path.file_name().unwrap().to_str().unwrap().as_bytes();
     meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
     meta.extend_from_slice(fname);
     meta.extend_from_slice(&(total_len as u64).to_be_bytes());
-    socket.send_to(&meta, format!("{}:{}", ip, p1_port)).await?;
+    
+    let mut meta_confirmed = false;
+    while !meta_confirmed {
+        let _ = tx.send(MissionEvent::HandshakeStarted).await; // Re-use for status
+        socket.send_to(&meta, format!("{}:{}", ip, p1_port)).await?;
+        
+        let mut ack_buf = [0u8; 64];
+        if let Ok(Ok((n, _))) = tokio::time::timeout(std::time::Duration::from_millis(300), socket.recv_from(&mut ack_buf)).await {
+            let msg = String::from_utf8_lossy(&ack_buf[..n]);
+            if msg.starts_with("META_ACK") {
+                meta_confirmed = true;
+            }
+        }
+    }
 
     // Probing & AI
     let _ = tx.send(MissionEvent::ProbingLanes).await;
