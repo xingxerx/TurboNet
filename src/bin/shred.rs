@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     println!("🔥 TURBONET: DEEP-SEA ASYMMETRIC SHREDDER v3.0 ENGAGED...");
     
-    let target_ip = std::env::var("TURBONET_TARGET_IP").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let target_ip = std::env::var("TURBONET_TARGET_IP").unwrap_or_else(|_| "192.168.50.245".to_string());
     let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
     let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
     let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
@@ -139,18 +139,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (ct, shared_secret) = encapsulate(&pk_buf, &mut rng).map_err(|_| "Encapsulation failed")?;
     let quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
 
-    // Quantum Mesh: Shred Kyber Ciphertext across 3 lanes
-    println!("⚛️ LATTICE: Shredding Ciphertext across 3 physical lanes...");
-    let chunk_size_ct = (ct.len() + 2) / 3;
-    let f1 = &ct[0..chunk_size_ct];
-    let f2 = &ct[chunk_size_ct..chunk_size_ct*2];
-    let f3 = &ct[chunk_size_ct*2..];
+    // Level 11 METADATA: Robust Handshake
+    println!("📦 LATTICE: Synchronizing Metadata with Ghost Receiver...");
+    let mut meta = vec![b'M'];
+    let fname = "input.jpg"; // Default for shred.rs
+    meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
+    meta.extend_from_slice(fname.as_bytes());
+    meta.extend_from_slice(&(total_len as u64).to_be_bytes());
 
-    socket.send_to(f1, format!("{}:{}", target_ip, p1_port)).await?;
-    socket.send_to(f2, format!("{}:{}", target_ip, p2_port)).await?;
-    socket.send_to(f3, format!("{}:{}", target_ip, p3_port)).await?;
-
-    println!("✅ SUCCESS: Quantum Handshake complete. Session locked.");
+    let mut meta_confirmed = false;
+    while !meta_confirmed {
+        socket.send_to(&meta, format!("{}:{}", target_ip, p1_port)).await?;
+        let mut ack_buf = [0u8; 64];
+        if let Ok(Ok((n, _))) = tokio::time::timeout(std::time::Duration::from_millis(500), socket.recv_from(&mut ack_buf)).await {
+            let msg = String::from_utf8_lossy(&ack_buf[..n]);
+            if msg.starts_with("META_ACK") {
+                meta_confirmed = true;
+            }
+        }
+    }
+    println!("✅ SUCCESS: Metadata synchronized. Ghost is ready.");
 
     // LEVEL 7/8: AUTO-PILOT & NEURAL STRATEGIST
     let dynamic_mode = std::env::var("TURBONET_DYNAMIC").unwrap_or_else(|_| "false".to_string()) == "true";
@@ -258,10 +266,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         async fn blast_lane(s: &UdpSocket, data: &[u8], port: u16, target_ip: &str, head: &[u8], chunk_size: usize) {
             let _ = s.send_to(head, format!("{}:{}", target_ip, port)).await;
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            // Bandwidth Beast: Performance optimization
+            tokio::task::yield_now().await;
             for chunk in data.chunks(chunk_size) {
                 let _ = s.send_to(chunk, format!("{}:{}", target_ip, port)).await;
-                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
             }
         }
 
