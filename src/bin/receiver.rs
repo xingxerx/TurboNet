@@ -6,6 +6,7 @@ use std::io::Write;
 use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
 use aes_gcm::aead::Aead;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use pqc_kyber::*;
 
 fn get_hits(t: u64, w_total: u64, w_target: u64, offset: u64) -> u64 {
     if t == 0 { return 0; }
@@ -39,16 +40,14 @@ fn get_lane_len_asymmetric(n: usize, salt: u64, w0: i32, w1: i32, w2: i32, lane:
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        println!("❌ Usage: receiver <SALT> <TOTAL_SIZE>");
-        return Ok(());
-    }
-    let salt: u64 = args[1].parse().expect("Invalid Salt");
-    let total_expected: usize = args[2].parse().expect("Invalid Total Size");
+    let total_expected_arg: usize = env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
 
-    println!("👻 GHOST RECEIVER v2.1 | DASHBOARD ONLINE");
-    println!("🔑 SALT: {} | 📦 SIZE: {} bytes", salt, total_expected);
+    println!("👻 GHOST RECEIVER v3.0 | LATTICE-POST-QUANTUM ONLINE");
+
+    // LEVEL 9: LATTICE KEY GENERATION
+    let mut rng = rand::thread_rng();
+    let keys = keypair(&mut rng).map_err(|e| format!("Kyber Error: {:?}", e))?;
+    println!("⚛️ LATTICE: Post-Quantum Kyber-768 keypair generated.");
 
     let p1_port = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string());
     let p2_port = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string());
@@ -56,12 +55,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let block_size: usize = std::env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
 
     let l1 = UdpSocket::bind(format!("0.0.0.0:{}", p1_port)).await?;
-    let l2 = UdpSocket::bind(format!("0.0.0.0:{}", p2_port)).await?;
-    let l3 = UdpSocket::bind(format!("0.0.0.0:{}", p3_port)).await?;
+    let l2 = std::sync::Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", p2_port)).await?);
+    let l3 = std::sync::Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", p3_port)).await?);
 
+    // QUANTUM HANDSHAKE: Listen for PK_REQ
+    println!("📡 HANDSHAKE: Waiting for Shredder to request Lattice Public Key...");
+    let mut buf = [0u8; 1024];
+    let quantum_salt;
+    let mut shared_secret = [0u8; 32];
+
+    loop {
+        let (len, addr) = l1.recv_from(&mut buf).await?;
+        if &buf[..len] == b"PK_REQ" {
+            println!("🤝 HANDSHAKE: Shredder found. Sending Public Key...");
+            l1.send_to(&keys.public, addr).await?;
+            break;
+        }
+    }
+
+    // Capture Encapsulated Secret (in fragments across 3 lanes)
+    println!("⚛️ LATTICE: Capturing Quantum-Mesh ciphertext fragments...");
+    let ct_len = KYBER_CIPHERTEXTBYTES;
+    let mut ct_full = vec![0u8; ct_len];
+
+    // Wait for fragments
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(1);
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(1);
+    let (tx3, mut rx3) = tokio::sync::mpsc::channel(1);
+
+    let l1_arc = std::sync::Arc::new(l1);
+    let l1_h = l1_arc.clone();
+    let l2_h = l2.clone();
+    let l3_h = l3.clone();
+
+    tokio::spawn(async move {
+        let mut b = [0u8; 1024];
+        let (n, _) = l1_h.recv_from(&mut b).await.unwrap();
+        tx1.send(b[..n].to_vec()).await.unwrap();
+    });
+    tokio::spawn(async move {
+        let mut b = [0u8; 1024];
+        let (n, _) = l2_h.recv_from(&mut b).await.unwrap();
+        tx2.send(b[..n].to_vec()).await.unwrap();
+    });
+    tokio::spawn(async move {
+        let mut b = [0u8; 1024];
+        let (n, _) = l3_h.recv_from(&mut b).await.unwrap();
+        tx3.send(b[..n].to_vec()).await.unwrap();
+    });
+
+    let f1 = rx1.recv().await.unwrap();
+    let f2 = rx2.recv().await.unwrap();
+    let f3 = rx3.recv().await.unwrap();
+
+    ct_full[0..f1.len()].copy_from_slice(&f1);
+    ct_full[f1.len()..f1.len()+f2.len()].copy_from_slice(&f2);
+    ct_full[f1.len()+f2.len()..ct_len].copy_from_slice(&f3);
+
+    let decoded_secret = decapsulate(&ct_full, &keys.secret).map_err(|_| "Decapsulation failed")?;
+    shared_secret.copy_from_slice(&decoded_secret);
+    quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
+    println!("✅ SUCCESS: Quantum Handshake complete. Shared Secret derived.");
+
+    // Level 11 METADATA: Wait for filename and size
+    println!("📦 LATTICE: Waiting for Payload Metadata...");
+    let mut m_buf = [0u8; 2048];
+    let (m_len, _) = l1_arc.recv_from(&mut m_buf).await?;
+    let (filename, total_expected) = if m_buf[0] == b'M' {
+        let f_len = u32::from_be_bytes(m_buf[1..5].try_into().unwrap()) as usize;
+        let name = String::from_utf8_lossy(&m_buf[5..5+f_len]).to_string();
+        let size = u64::from_be_bytes(m_buf[5+f_len..5+f_len+8].try_into().unwrap()) as usize;
+        (name, size)
+    } else {
+        ("unknown_payload.bin".to_string(), total_expected_arg)
+    };
+
+    println!("🎯 TARGET IDENTIFIED: {} ({} bytes)", filename, total_expected);
+    
     let total_blocks = (total_expected + block_size - 1) / block_size;
-    let _ = std::fs::remove_file("reborn_image.jpg");
-    let mut output_file = OpenOptions::new().create(true).write(true).open("reborn_image.jpg")?;
+    let out_name = format!("reborn_{}", filename);
+    let _ = std::fs::remove_file(&out_name);
+    let mut output_file = OpenOptions::new().create(true).write(true).open(&out_name)?;
 
     let multiprogress = MultiProgress::new();
     let sty = ProgressStyle::default_bar()
@@ -71,17 +145,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pb1 = multiprogress.add(ProgressBar::new(0));
     pb1.set_style(sty.clone());
     pb1.set_prefix("📡 2.4GHz ");
-
     let pb2 = multiprogress.add(ProgressBar::new(0));
     pb2.set_style(sty.clone());
     pb2.set_prefix("⚡ 5GHz-1 ");
-
     let pb3 = multiprogress.add(ProgressBar::new(0));
     pb3.set_style(sty);
     pb3.set_prefix("⚡ 5GHz-2 ");
 
     async fn collect_lane_data(s: &UdpSocket, expected_salt: u64, expected_b: u32, pb: &ProgressBar) -> (Vec<u8>, usize, i32, i32, i32) {
-        let mut buf = [0u8; 1024];
+        let mut buf = [0u8; 2048];
         let mut target_enc_n = 0;
         let (mut w0, mut w1, mut w2) = (0, 0, 0);
 
@@ -128,9 +200,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for block_idx in 0..total_blocks {
         let (r1, r2, r3) = tokio::join!(
-            collect_lane_data(&l1, salt, block_idx as u32, &pb1),
-            collect_lane_data(&l2, salt, block_idx as u32, &pb2),
-            collect_lane_data(&l3, salt, block_idx as u32, &pb3),
+            collect_lane_data(&l1_arc, quantum_salt, block_idx as u32, &pb1),
+            collect_lane_data(&l2, quantum_salt, block_idx as u32, &pb2),
+            collect_lane_data(&l3, quantum_salt, block_idx as u32, &pb3),
         );
         
         let (d0, current_enc_n, w0, w1, w2) = r1;
@@ -139,7 +211,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut re = vec![0u8; current_enc_n];
         let w_total = (w0 + w1 + w2) as u64;
-        let pattern_offset = salt % w_total;
+        let pattern_offset = quantum_salt % w_total;
         let i0 = get_hits(pattern_offset, w_total, w0 as u64, 0);
         let i1 = get_hits(pattern_offset, w_total, w1 as u64, w0 as u64);
         let i2 = get_hits(pattern_offset, w_total, w2 as u64, (w0 + w1) as u64);
@@ -149,21 +221,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let block_id = eff / w_total;
             let pos = eff % w_total;
             if pos < w0 as u64 {
-                let local_idx = (block_id * w0 as u64 + pos) - i0;
-                re[i] = d0[local_idx as usize];
+                let local_idx = (block_id * w0 as u64 + pos).checked_sub(i0).unwrap_or(0);
+                if (local_idx as usize) < d0.len() { re[i] = d0[local_idx as usize]; }
             } else if pos < (w0 + w1) as u64 {
-                let local_idx = (block_id * w1 as u64 + (pos - w0 as u64)) - i1;
-                re[i] = d1[local_idx as usize];
+                let local_idx = (block_id * w1 as u64 + (pos - w0 as u64)).checked_sub(i1).unwrap_or(0);
+                if (local_idx as usize) < d1.len() { re[i] = d1[local_idx as usize]; }
             } else {
-                let local_idx = (block_id * w2 as u64 + (pos - (w0 + w1) as u64)) - i2;
-                re[i] = d2[local_idx as usize];
+                let local_idx = (block_id * w2 as u64 + (pos - (w0 + w1) as u64)).checked_sub(i2).unwrap_or(0);
+                if (local_idx as usize) < d2.len() { re[i] = d2[local_idx as usize]; }
             }
         }
 
-        let key_material = salt.to_be_bytes();
-        let mut full_key = [0u8; 32];
-        for k in 0..4 { full_key[k*8..(k+1)*8].copy_from_slice(&key_material); }
-        let key = Key::<Aes256Gcm>::from_slice(&full_key);
+        let key = Key::<Aes256Gcm>::from_slice(&shared_secret);
         let cipher = Aes256Gcm::new(key);
         let mut nonce_bytes = [0u8; 12];
         nonce_bytes[0..4].copy_from_slice(&(block_idx as u32).to_be_bytes());
@@ -176,6 +245,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pb1.finish_and_clear();
     pb2.finish_and_clear();
     pb3.finish_and_clear();
-    println!("🎉 SUCCESS: Deep-Sea stream reassembled and saved.");
+    println!("🎉 SUCCESS: Post-Quantum stream reassembled and saved.");
     Ok(())
 }

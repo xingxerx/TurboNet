@@ -1,53 +1,68 @@
-# 🚀 TurboNet: High-Performance GPU Network Shredder
+# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v4.0)
 
-**TurboNet** is a specialized High-Performance Computing (HPC) node designed to shred files using GPU kernels and broadcast them simultaneously across multiple network lanes using 10Gbps Ethernet.
+**TurboNet** is a state-of-the-art software suite designed for ultra-secure, AI-optimized data fragmentation. It bridges **GPU-accelerated shredding** with **Post-Quantum Cryptography** and an **AI Reasoning Engine** to create an un-interceptable data stream across multiple physical network bands.
 
-## ⚡ Core Architecture
+---
 
-1.  **GPU Shredding**: Uses a custom CUDA kernel (`shredder.cu`) to split data into three logical frequency bands (2.4GHz, 5GHz-1, 5GHz-2).
-2.  **Quantum Parallelism**: Blasts data across three distinct UDP ports (`8001`, `8002`, `8003`) simultaneously using `tokio::join!`.
-3.  **Router Bounce**: Bypasses Windows loopback restrictions by targeting the router (`192.168.x.x`) and catching the reflected packets on the return trip.
+## 🛠️ The Tech Stack
 
-## 🛡️ Level 4 Security Protocol
+-   **Frontend**: `egui` + `eframe` (High-performance 60FPS Immediate Mode GUI).
+-   **Security**: `pqc_kyber` (Kyber-768/ML-KEM) + `aes-gcm` (AES-256).
+-   **Intelligence**: `DeepSeek-R1:8b` (Local LLM via Ollama).
+-   **Performance**: `CUDA 13.0` (Hardware-parallel shredding).
+-   **Network**: `Tokio` (Async UDP multi-band blasting).
 
-This system implements military-grade data protection:
+---
 
-*   **Frequency Leak Protection**: A cryptographic `Salt` is generated per session to jitter the shredding pattern, preventing side-channel analysis.
-*   **Digital Wax Seal**: Every packet is signed with a 64-bit header (`Salt ^ 0xDEADBEEF...`) to verify integrity.
-*   **Interface Lockdown**: attempting to bind specific high-speed interfaces.
-*   **VRAM Sanitization**: GPU memory is overwritten with zeros before termination to prevent data forensics.
+## 🚀 Key Features
 
-## 🛠️ Prerequisites
+### ⚛️ Level 9: The Lattice-Based Ghost
+TurboNet uses **Module-Lattice (ML-KEM)** math to perform a quantum-safe handshake. The session key is never shared over the wire; it is encapsulated and decrypted using Kyber-768, protecting your data against future quantum computers (**Harvest Now, Decrypt Later Resistance**).
 
--   **Hardware**: NVIDIA GPU (CUDA Capable), 10Gbps Ethernet Card.
--   **Software**: Rust (Cargo), CUDA Toolkit v13.0+.
--   **Network**: ASUS GT-AX11000 Pro (or similar high-performance router) at `192.168.x.x`.
+### 🧠 Level 8: The Neural Strategist
+Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4GHz band gets congested while the 5GHz bands are clear, the AI automatically re-calculates the GPU shredding weights (w0, w1, w2) to shift traffic to the fastest path.
 
-## 🚦 The "Ghost Receiver" Drill
+### 🖥️ Level 10: Mission Control Dashboard
+A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click.
 
-To verify the pipeline, perform the **Manual Key Exchange**:
+---
 
-### 1. Launch the Receiver (The Ghost)
-The receiver waits for the specific session signature.
+## 🚦 How to Run the Suite
+
+### 1. Prerequisites
+-   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
+-   **Software**: Rust (Cargo), CUDA Toolkit, and [Ollama](https://ollama.com/) (running `deepseek-r1:8b`).
+
+### 2. Launch the Ghost Receiver
+The receiver must be running first to generate the lattice keypair and listen for fragments.
 ```bash
-cargo run --release --bin receiver -- <SALT_VALUE>
+# You must provide the expected total size in bytes (logged by the sender)
+./target/release/receiver.exe <TOTAL_BYTES>
 ```
 
-### 2. Launch the Broadcaster (The Shredder)
-Generates the Salt and prepares the GPU.
+### 3. Launch Mission Control (The Controller)
+Open the GUI dashboard to manage the mission.
 ```bash
-cargo run --release --bin shred
+./target/release/mission_control.exe
 ```
-*Copy the `SESSION SALT` displayed here and paste it into the Receiver command.*
 
-### 3. Engage
-Press **ENTER** on the Shredder terminal.
--   **Shredder**: Encrypts, Splits, Signs, and Blasts.
--   **Receiver**: Catches reflected packets, Verifies Signatures, and Re-assembles.
+1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
+2.  **Telemetry**: Observe the **Neural Radar** (gauges) as they probe your 2.4GHz/5GHz lanes.
+3.  **Blast**: Click "🚀 INITIATE QUANTUM BLAST".
+    -   Handshake: Derives session entropy via Kyber shards.
+    -   AI Strategy: DeepSeek-R1 decides the lane distribution.
+    -   Streaming: CUDA shards and encrypts data in real-time.
+
+---
+
+## 🛡️ Security Protocol (Quantum Mesh)
+When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three network ports (`8001`, `8002`, `8003`). An attacker would need to intercept **all three physical bands simultaneously** AND possess a **4000+ qubit Quantum Computer** to compromise the session.
 
 ## 📂 Project Structure
+-   `src/bin/mission_control.rs`: The v4.0 GUI Controller.
+-   `src/bin/receiver.rs`: The Ghost Receiver.
+-   `src/bin/shred.rs`: Legacy Command-Line Shredder.
+-   `shredder.cu`: The mathematical "heart"—the CUDA kernel for asymmetric shredding.
 
--   `src/bin/shred.rs`: The Broadcaster. GPU management, Kernel Launch, UDP Blast.
--   `src/bin/receiver.rs`: The Receiver. Signature Verification, Packet Re-assembly.
--   `shredder.cu`: The CUDA Kernel. Handles the mathematical splitting/salting logic.
--   `build.rs`: Automates the NVRTC DLL setup for seamless building.
+---
+**The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆
