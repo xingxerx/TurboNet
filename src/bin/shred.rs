@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     println!("🔥 TURBONET: DEEP-SEA ASYMMETRIC SHREDDER v3.0 ENGAGED...");
     
-    let target_ip = std::env::var("TURBONET_TARGET_IP").unwrap_or_else(|_| "192.168.50.245".to_string());
+    let target_ip = "192.168.50.245";
     let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
     let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
     let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
@@ -124,11 +124,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📦 STREAMING: {} bytes in {} blocks (BlockSize: {}MB)", total_len, total_blocks, block_size / 1024 / 1024);
     println!("👉 Run: receiver.exe {}", total_len);
     println!("⚠️ PRESS ENTER TO INITIATE QUANTUM HANDSHAKE...");
-    let mut line = String::new();
-    std::io::stdin().read_line(&mut line)?;
+    let mut _line = String::new();
+    let _ = std::io::stdin().read_line(&mut _line);
 
-    // LEVEL 9: QUANTUM HANDSHAKE
-    println!("⚛️ LATTICE: Requesting Public Key from Ghost Receiver...");
+    // Level 9 Handshake: Target Laptop
+    println!("⚛️ LATTICE: Requesting Public Key from Ghost Receiver at {}:{}...", target_ip, p1_port);
     socket.send_to(b"PK_REQ", format!("{}:{}", target_ip, p1_port)).await?;
     let mut pk_buf = [0u8; KYBER_PUBLICKEYBYTES];
     let (n, _) = tokio::time::timeout(std::time::Duration::from_secs(5), socket.recv_from(&mut pk_buf)).await??;
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🤝 HANDSHAKE: Public Key received. Encapsulating secret...");
     let mut rng = rand::thread_rng();
-    let (ct, shared_secret) = encapsulate(&pk_buf, &mut rng).map_err(|_| "Encapsulation failed")?;
+    let (_ct, shared_secret) = encapsulate(&pk_buf, &mut rng).map_err(|_| "Encapsulation failed")?;
     let quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
 
     // Level 11 METADATA: Robust Handshake

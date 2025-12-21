@@ -70,7 +70,7 @@ impl MissionControlApp {
 
         Self {
             file_path: None,
-            target_ip: "127.0.0.1".to_string(),
+            target_ip: "192.168.50.245".to_string(),
             lane_rtts: [0.0; 3],
             ai_status: "Awaiting Command...".to_string(),
             current_block: 0,
