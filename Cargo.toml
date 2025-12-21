@@ -7,6 +7,7 @@ edition = "2021"
 cudarc = { version = "0.11", features = ["cuda-12010", "nvrtc", "driver"] }
 tokio = { version = "1", features = ["full"] }
 network-interface = "1.1"
+rand = "0.8"
 
 # This tells Cargo to automatically find all your scripts in src/bin/
 [lib]
