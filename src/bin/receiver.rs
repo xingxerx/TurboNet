@@ -1,6 +1,8 @@
 use tokio::net::UdpSocket;
 use std::env;
 use std::convert::TryInto;
+use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
+use aes_gcm::aead::Aead;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -17,12 +19,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("👻 GHOST RECEIVER ONLINE | SALT: {}", salt);
 
-    // Bind to the 3 ASUS lanes
+    // Listen on 0.0.0.0 to catch the "Bounce" from the router
     let l1 = UdpSocket::bind("0.0.0.0:8001").await?;
     let l2 = UdpSocket::bind("0.0.0.0:8002").await?;
     let l3 = UdpSocket::bind("0.0.0.0:8003").await?;
 
-    println!("📡 Listening for signed packets...");
+    println!("📡 Listening on 0.0.0.0 Ports 8001, 8002, 8003 (Router Bounce Mode)...");
 
     // Buffer size: 65535 is safe max for UDP
     let mut b1 = [0u8; 65535];
@@ -50,7 +52,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("✅ SIGNATURES MATCH. Security clear.");
         
         // Data is at b1[8..len1], etc.
-        println!("� REASSEMBLED: {} total bytes received.", (len1+len2+len3) - 24);
+        println!("📦 REASSEMBLED: {} total bytes received.", (len1+len2+len3) - 24);
+
+        // --- REASSEMBLY LOGIC ---
+        let payload_len = (len1 - 8) + (len2 - 8) + (len3 - 8);
+        let mut reconstructed = vec![0u8; payload_len];
+
+        // Reverse the Shredder's "Quantum Loop"
+        for idx in 0..payload_len {
+             let lane = (idx as u64 + salt) % 3;
+             let lane_idx = idx / 3;
+             
+             // +8 to skip the Magic Header
+             let byte = if lane == 0 { b1[8 + lane_idx] }
+             else if lane == 1 { b2[8 + lane_idx] }
+             else { b3[8 + lane_idx] };
+             
+             reconstructed[idx] = byte;
+        }
+
+        // --- DECRYPTION LOGIC ---
+        println!("🔓 DECRYPTING content...");
+        let key_material = salt.to_be_bytes(); 
+        let mut full_key = [0u8; 32];
+        for i in 0..4 { full_key[i*8..(i+1)*8].copy_from_slice(&key_material); }
+        let key = Key::<Aes256Gcm>::from_slice(&full_key);
+        let cipher = Aes256Gcm::new(key);
+        let nonce = Nonce::from_slice(&[0u8; 12]);
+        
+        match cipher.decrypt(nonce, reconstructed.as_ref()) {
+            Ok(plaintext) => {
+                std::fs::write("reborn_image.jpg", plaintext).expect("Failed to write reborn file");
+                println!("🎉 SUCCESS: Image decrypted and saved to 'reborn_image.jpg'");
+            },
+            Err(_) => {
+                println!("⛔ DECRYPTION FAILED: Auth Tag Mismatch! Data tainted.");
+            }
+        }
     } else {
         println!("🚫 SECURITY ALERT: Invalid signature detected! DROP DATA.");
         println!("   Expected: {:X}", expected_sig);

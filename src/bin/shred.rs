@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use rand::Rng;
+use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
+use aes_gcm::aead::{Aead, OsRng};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,12 +40,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ SHREDDER RUNNING ON CUDA CORE 0");
 
     // 5. Data Prep & Allocation
-    // Reading REAL file "TOP_SECRET.bin"
-    let input_path = "TOP_SECRET.bin";
-    let input_data = fs::read(input_path).map_err(|e| format!("Failed to read {}: {}", input_path, e))?;
-    let n = input_data.len();
+    // --- PAYLOAD: ENCRYPTED IMAGE ---
+    println!("🔐 ENCRYPTING PAYLOAD (Level 5 Security)...");
+    let input_path = "input.jpg";
+    let mut file_bytes = fs::read(input_path).map_err(|e| format!("Failed to read {}: {}", input_path, e))?;
+    
+    // --- ENCRYPTION LOGIC ---
+    // 1. Derive Key from Salt
+    let key_material = salt.to_be_bytes(); 
+    let mut full_key = [0u8; 32];
+    for i in 0..4 { full_key[i*8..(i+1)*8].copy_from_slice(&key_material); }
+    let key = Key::<Aes256Gcm>::from_slice(&full_key);
+    let cipher = Aes256Gcm::new(key);
+    let nonce = Nonce::from_slice(&[0u8; 12]); // Static nonce for lab drill
 
-    let mut d_in = dev.htod_copy(input_data)?;
+    // 2. Encrypt
+    let ciphertext = cipher.encrypt(nonce, file_bytes.as_ref())
+        .expect("Encryption failure!");
+        
+    println!("📦 Payload Size: {} bytes -> Encrypted: {} bytes", file_bytes.len(), ciphertext.len());
+
+    let n = ciphertext.len();
+    let mut d_in = dev.htod_copy(ciphertext)?;
     
     // Allocate outputs (N / 3 approx)
     let lane_size = n / 3 + 100; // Safety padding
@@ -106,15 +124,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         [magic_bytes.as_slice(), data].concat()
     };
 
-    let p1 = sign_packet(&host_24[0..n/3]);
-    let p2 = sign_packet(&host_5g1[0..n/3]);
-    let p3 = sign_packet(&host_5g2[0..n/3]);
+    let len0 = (n + 2) / 3;
+    let len1 = (n + 1) / 3;
+    let len2 = n / 3;
+
+    let p1 = sign_packet(&host_24[0..len0]);
+    let p2 = sign_packet(&host_5g1[0..len1]);
+    let p3 = sign_packet(&host_5g2[0..len2]);
+
+    // Target the LOCAL IP for Direct Lane Test (Bypass Router Reflection)
+    let router_ip = "192.168.50.97"; 
 
     // Fire all three at the EXACT same time using Tokio tasks
     let (r1, r2, r3) = tokio::join!(
-        async { s1.send_to(&p1, "192.168.50.1:8001").await },
-        async { s2.send_to(&p2, "192.168.50.1:8002").await },
-        async { s3.send_to(&p3, "192.168.50.1:8003").await },
+        async { s1.send_to(&p1, format!("{}:8001", router_ip)).await },
+        async { s2.send_to(&p2, format!("{}:8002", router_ip)).await },
+        async { s3.send_to(&p3, format!("{}:8003", router_ip)).await },
     );
 
     r1?; r2?; r3?;
