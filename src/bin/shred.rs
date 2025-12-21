@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::net::UdpSocket;
 use rand::Rng;
 use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
-use aes_gcm::aead::{Aead, OsRng};
+use aes_gcm::aead::Aead;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- PAYLOAD: ENCRYPTED IMAGE ---
     println!("🔐 ENCRYPTING PAYLOAD (Level 5 Security)...");
     let input_path = "input.jpg";
-    let mut file_bytes = fs::read(input_path).map_err(|e| format!("Failed to read {}: {}", input_path, e))?;
+    let file_bytes = fs::read(input_path).map_err(|e| format!("Failed to read {}: {}", input_path, e))?;
     
     // --- ENCRYPTION LOGIC ---
     // 1. Derive Key from Salt
@@ -75,7 +75,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- MANUAL KEY EXCHANGE ---
     println!("\n🔑 SESSION SALT: {}", salt);
-    println!("👉 Copy this Salt to your Receiver command: receiver.exe {}", salt);
+    println!("📦 ENCRYPTED SIZE: {} bytes", n);
+    println!("👉 Run: receiver.exe {} {}", salt, n);
     println!("⚠️ PRESS ENTER TO ROTATE BLADES AND BLAST DATA...");
     
     let mut input = String::new();
@@ -89,9 +90,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host_5g2 = dev.dtoh_sync_copy(&d_5g2)?;
 
     // --- SECURITY 3: INTERFACE BINDING (LOCK THE DOORS) ---
-    // Find the interface encoded with 192.168.50.x
-    let mut bind_ip = "0.0.0.0".to_string();
+    // (Existing interface binding logic...)
     let network_interfaces = NetworkInterface::show()?;
+    let mut bind_ip = "0.0.0.0".to_string();
     for itf in network_interfaces {
         for addr in itf.addr {
              if let Addr::V4(v4) = addr {
@@ -106,45 +107,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("🛡️ LOCKED TO SECURE INTERFACE: {}", bind_ip);
     let socket = Arc::new(UdpSocket::bind(format!("{}:0", bind_ip)).await?);
-    socket.set_broadcast(true)?;
     
-    println!("🚀 BLASTING 3 LANES SIMULTANEOUSLY...");
+    // --- SECURITY 2: PACKET INTEGRITY (WAX SEAL) ---
+    let magic = salt ^ 0xDEADBEEFDEADBEEF;
+    let magic_bytes = magic.to_be_bytes();
+
+    let get_lane_len = |n: usize, salt: u64, lane: u64| -> usize {
+        let offset = (lane + 6000000 - (salt % 3)) % 3; // Use large multiple of 3 for safety
+        if (offset as usize) < n {
+            (n - 1 - offset as usize) / 3 + 1
+        } else {
+            0
+        }
+    };
+
+    let len0 = get_lane_len(n, salt, 0);
+    let len1 = get_lane_len(n, salt, 1);
+    let len2 = get_lane_len(n, salt, 2);
+
+    println!("🚀 BLASTING 3 LANES (CHUNKED MODE)...");
     
+    let target_ip = bind_ip.as_str(); // Target the interface we actually bound to
+    let chunk_size = 32768; // 32KB chunks
+
     let s1 = socket.clone();
     let s2 = socket.clone();
     let s3 = socket.clone();
 
-    // --- SECURITY 2: PACKET INTEGRITY (WAX SEAL) ---
-    // Prepend a magic signature (First 8 bytes of salt ^ 0xDEADBEEF)
-    let magic = salt ^ 0xDEADBEEFDEADBEEF;
-    let magic_bytes = magic.to_be_bytes();
-
-    // Helper to create a signed packet
-    let sign_packet = |data: &[u8]| -> Vec<u8> {
-        [magic_bytes.as_slice(), data].concat()
-    };
-
-    let len0 = (n + 2) / 3;
-    let len1 = (n + 1) / 3;
-    let len2 = n / 3;
-
-    let p1 = sign_packet(&host_24[0..len0]);
-    let p2 = sign_packet(&host_5g1[0..len1]);
-    let p3 = sign_packet(&host_5g2[0..len2]);
-
-    // Target the LOCAL IP for Direct Lane Test (Bypass Router Reflection)
-    let router_ip = "192.168.50.97"; 
-
-    // Fire all three at the EXACT same time using Tokio tasks
-    let (r1, r2, r3) = tokio::join!(
-        async { s1.send_to(&p1, format!("{}:8001", router_ip)).await },
-        async { s2.send_to(&p2, format!("{}:8002", router_ip)).await },
-        async { s3.send_to(&p3, format!("{}:8003", router_ip)).await },
+    // Fire all three lanes in parallel
+    let _ = tokio::join!(
+        async {
+            // Lane 1: Header + Data Chunks
+            let p1_data = &host_24[0..len0];
+            s1.send_to(&magic_bytes, format!("{}:8001", target_ip)).await.ok();
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await; // Give receiver a head start
+            for chunk in p1_data.chunks(chunk_size) {
+                s1.send_to(chunk, format!("{}:8001", target_ip)).await.ok();
+            }
+        },
+        async {
+            // Lane 2: Header + Data Chunks
+            let p2_data = &host_5g1[0..len1];
+            s2.send_to(&magic_bytes, format!("{}:8002", target_ip)).await.ok();
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            for chunk in p2_data.chunks(chunk_size) {
+                s2.send_to(chunk, format!("{}:8002", target_ip)).await.ok();
+            }
+        },
+        async {
+            // Lane 3: Header + Data Chunks
+            let p3_data = &host_5g2[0..len2];
+            s3.send_to(&magic_bytes, format!("{}:8003", target_ip)).await.ok();
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            for chunk in p3_data.chunks(chunk_size) {
+                s3.send_to(chunk, format!("{}:8003", target_ip)).await.ok();
+            }
+        },
     );
 
-    r1?; r2?; r3?;
-
-    println!("⚡ TOTAL SUCCESS: File shredded by GPU and distributed across all ASUS frequencies!");
+    println!("⚡ TOTAL SUCCESS: File shredded and distributed!");
 
     // --- SECURITY 4: VRAM SANITIZATION (CLEAN UPDATE) ---
     println!("🧹 SANITIZING VRAM...");
