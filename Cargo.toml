@@ -10,6 +10,7 @@ network-interface = "1.1"
 rand = "0.8"
 aes-gcm = "0.10"
 aead = "0.5"
+dotenvy = "0.15"
 
 # This tells Cargo to automatically find all your scripts in src/bin/
 [lib]

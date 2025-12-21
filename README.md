@@ -6,7 +6,7 @@
 
 1.  **GPU Shredding**: Uses a custom CUDA kernel (`shredder.cu`) to split data into three logical frequency bands (2.4GHz, 5GHz-1, 5GHz-2).
 2.  **Quantum Parallelism**: Blasts data across three distinct UDP ports (`8001`, `8002`, `8003`) simultaneously using `tokio::join!`.
-3.  **Router Bounce**: Bypasses Windows loopback restrictions by targeting the router (`192.168.50.1`) and catching the reflected packets on the return trip.
+3.  **Router Bounce**: Bypasses Windows loopback restrictions by targeting the router (`192.168.x.x`) and catching the reflected packets on the return trip.
 
 ## 🛡️ Level 4 Security Protocol
 
@@ -21,7 +21,7 @@ This system implements military-grade data protection:
 
 -   **Hardware**: NVIDIA GPU (CUDA Capable), 10Gbps Ethernet Card.
 -   **Software**: Rust (Cargo), CUDA Toolkit v13.0+.
--   **Network**: ASUS GT-AX11000 Pro (or similar high-performance router) at `192.168.50.1`.
+-   **Network**: ASUS GT-AX11000 Pro (or similar high-performance router) at `192.168.x.x`.
 
 ## 🚦 The "Ghost Receiver" Drill
 
