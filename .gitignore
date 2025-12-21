@@ -1,0 +1,6 @@
+# Prevent build artifacts and temporary files from being committed
+/target/
+**/*.rs.bk
+Cargo.lock
+*.log
+*.tmp
