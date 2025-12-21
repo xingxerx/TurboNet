@@ -262,11 +262,30 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
         h[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
         h[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
 
-        let _ = tokio::join!(
-            blast_lane_gui(&socket, &host_24[0..l0], p1_port, &ip, &h),
-            blast_lane_gui(&socket, &host_5g1[0..l1], p2_port, &ip, &h),
-            blast_lane_gui(&socket, &host_5g2[0..l2], p3_port, &ip, &h),
-        );
+        let mut confirmed = false;
+        while !confirmed {
+            let _ = tokio::join!(
+                blast_lane_gui(&socket, &host_24[0..l0], p1_port, &ip, &h),
+                blast_lane_gui(&socket, &host_5g1[0..l1], p2_port, &ip, &h),
+                blast_lane_gui(&socket, &host_5g2[0..l2], p3_port, &ip, &h),
+            );
+
+            // Level 12 Sequencer: Wait for ACK
+            let mut res_buf = [0u8; 32];
+            match tokio::time::timeout(std::time::Duration::from_millis(2000), socket.recv_from(&mut res_buf)).await {
+                Ok(Ok((len, _))) => {
+                    let msg = String::from_utf8_lossy(&res_buf[..len]);
+                    if msg == format!("ACK:{}", b_idx) {
+                        confirmed = true;
+                    } else if msg == format!("NACK:{}", b_idx) {
+                        println!("🔄 NACK RECEIVED: Retransmitting Block {}", b_idx);
+                    }
+                }
+                _ => {
+                    println!("⌛ ACK TIMEOUT: Retransmitting Block {}", b_idx);
+                }
+            }
+        }
     }
 
     let _ = tx.send(MissionEvent::MissionSuccess).await;
