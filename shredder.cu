@@ -3,17 +3,29 @@ extern "C" __global__ void shred_kernel(
     unsigned char* band24, 
     unsigned char* band5g1, 
     unsigned char* band5g2, 
-    size_t n,
-    unsigned long long salt) 
+    unsigned long long n,
+    unsigned long long salt,
+    unsigned long long w0, 
+    unsigned long long w1, 
+    unsigned long long w2,
+    unsigned long long i0,
+    unsigned long long i1,
+    unsigned long long i2) 
 {
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned long long idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < n) {
-        // Quantum Logic: Each byte is assigned a 'frequency state'
-        // Level 4 Security: Jitter the distribution using the salt
-        size_t lane = (idx + salt) % 3;
+        unsigned long long W = w0 + w1 + w2;
+        unsigned long long pattern_offset = (salt % W);
+        unsigned long long effective_idx = idx + pattern_offset;
+        unsigned long long block_id = effective_idx / W;
+        unsigned long long pos_in_block = effective_idx % W;
         
-        if (lane == 0) band24[idx/3] = input[idx];
-        else if (lane == 1) band5g1[idx/3] = input[idx];
-        else band5g2[idx/3] = input[idx];
+        if (pos_in_block < w0) {
+            band24[block_id * w0 + pos_in_block - i0] = input[idx];
+        } else if (pos_in_block < w0 + w1) {
+            band5g1[block_id * w1 + (pos_in_block - w0) - i1] = input[idx];
+        } else {
+            band5g2[block_id * w2 + (pos_in_block - w0 - w1) - i2] = input[idx];
+        }
     }
 }
