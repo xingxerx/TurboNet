@@ -33,8 +33,8 @@ impl GhostReassembler {
     }
 }
 use tokio::net::UdpSocket;
-use pqc_kyber::{keypair, decapsulate};
-use aes_gcm::{Aes256Gcm, Key, KeyInit, aead::Aead};
+use pqc_kyber::keypair;
+// ...existing code...
 use std::sync::Arc;
 
 #[tokio::main]
@@ -42,13 +42,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
     
     // 1. Level 9: Generate Lattice Keypair (Quantum-Safe)
-    let keys = keypair(&mut rng).expect("Failed to generate Kyber-768 keys");
+    let _keys = keypair(&mut rng).expect("Failed to generate Kyber-768 keys");
     println!("🗝️  Lattice Public Key generated. Ready for Handshake.");
     
     // 2. Open listeners for the 3 network bands
-    let sock_24 = Arc::new(UdpSocket::bind("0.0.0.0:8001").await?);
-    let sock_5g1 = Arc::new(UdpSocket::bind("0.0.0.0:8002").await?);
-    let sock_5g2 = Arc::new(UdpSocket::bind("0.0.0.0:8003").await?);
+    let _sock_24 = Arc::new(UdpSocket::bind("0.0.0.0:8001").await?);
+    let _sock_5g1 = Arc::new(UdpSocket::bind("0.0.0.0:8002").await?);
+    let _sock_5g2 = Arc::new(UdpSocket::bind("0.0.0.0:8003").await?);
 
     println!("📡 Ghost Receiver listening on ports 8001, 8002, 8003...");
 
