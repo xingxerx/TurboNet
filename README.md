@@ -33,6 +33,7 @@ A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT
 -   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
 -   **Software**: Rust (Cargo), CUDA Toolkit, and [Ollama](https://ollama.com/) (running `deepseek-r1:8b`).
 
+
 ### 2. Launch the Ghost Receiver
 The receiver must be running first to generate the lattice keypair and listen for fragments.
 ```bash
@@ -44,6 +45,31 @@ The receiver must be running first to generate the lattice keypair and listen fo
 Open the GUI dashboard to manage the mission.
 ```bash
 ./target/release/mission_control.exe
+```
+
+---
+
+## 📝 All Command-Line Invocations
+
+You can run the main binaries using Cargo as follows:
+
+```bash
+# Run the Ghost Receiver (replace <TOTAL_BYTES> with your value)
+cargo run --release --bin receiver -- <TOTAL_BYTES>
+
+# Run Mission Control (GUI Controller)
+cargo run --release --bin mission_control --
+
+# Run the Legacy Command-Line Shredder
+cargo run --release --bin shred --
+```
+
+Or run the built executables directly:
+
+```bash
+./target/release/receiver.exe <TOTAL_BYTES>
+./target/release/mission_control.exe
+./target/release/shred.exe
 ```
 
 1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
