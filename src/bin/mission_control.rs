@@ -143,11 +143,19 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
     let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
     let block_size: usize = std::env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
 
-    let ptx_src = fs::read_to_string("shredder.cu")?;
-    let ptx = compile_ptx(ptx_src)?;
-    let dev = CudaDevice::new(0)?;
-    dev.load_ptx(ptx, "shredder", &["shred_kernel"])?;
-    
+    let dev = match CudaDevice::new(0) {
+        Ok(d) => {
+            let ptx_src = fs::read_to_string("shredder.cu")?;
+            let ptx = compile_ptx(ptx_src)?;
+            d.load_ptx(ptx, "shredder", &["shred_kernel"])?;
+            Some(d)
+        },
+        Err(_) => {
+            println!("⚠️ CUDA not available. Running in CPU-only mode.");
+            None
+        }
+    };
+
     let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
     let file_bytes = fs::read(&path)?;
     let total_len = file_bytes.len();
@@ -175,6 +183,8 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
         let salt = u64::from_be_bytes(ss[0..8].try_into().unwrap());
         (ct, ss, salt)
     };
+    // Send 8-byte file size header to receiver (required for handshake)
+    socket.send_to(&(total_len as u64).to_be_bytes(), format!("{}:{}", ip, p1_port)).await?;
     
     // Fragment CT across lanes
     let chunk_ct = (ct.len() + 2) / 3;
@@ -244,10 +254,11 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
         let ciphertext = cipher.encrypt(nonce, block_data).expect("ENC FAIL");
         let enc_n = ciphertext.len();
 
-        let d_in = dev.htod_copy(ciphertext)?;
-        let mut d_24 = dev.alloc_zeros::<u8>(enc_n + 1024)?;
-        let mut d_5g1 = dev.alloc_zeros::<u8>(enc_n + 1024)?;
-        let mut d_5g2 = dev.alloc_zeros::<u8>(enc_n + 1024)?;
+        let dev_ref = dev.as_ref().expect("CUDA device not available");
+        let d_in = dev_ref.htod_copy(ciphertext)?;
+        let mut d_24 = dev_ref.alloc_zeros::<u8>(enc_n + 1024)?;
+        let mut d_5g1 = dev_ref.alloc_zeros::<u8>(enc_n + 1024)?;
+        let mut d_5g2 = dev_ref.alloc_zeros::<u8>(enc_n + 1024)?;
 
         let w_total = (w0 + w1 + w2) as u64;
         let p_off = quantum_salt % w_total;
@@ -256,12 +267,12 @@ async fn shred_logic(tx: mpsc::Sender<MissionEvent>, path: PathBuf, ip: String) 
         let i2 = get_hits(p_off, w_total, w2 as u64, (w0 + w1) as u64);
 
         let cfg = LaunchConfig::for_num_elems(enc_n as u32);
-        let f = dev.get_func("shredder", "shred_kernel").unwrap();
+        let f = dev_ref.get_func("shredder", "shred_kernel").unwrap();
         unsafe { f.launch(cfg, (&d_in, &mut d_24, &mut d_5g1, &mut d_5g2, enc_n as u64, quantum_salt, w0 as u64, w1 as u64, w2 as u64, i0, i1, i2)) }?;
 
-        let host_24 = dev.dtoh_sync_copy(&d_24)?;
-        let host_5g1 = dev.dtoh_sync_copy(&d_5g1)?;
-        let host_5g2 = dev.dtoh_sync_copy(&d_5g2)?;
+        let host_24 = dev_ref.dtoh_sync_copy(&d_24)?;
+        let host_5g1 = dev_ref.dtoh_sync_copy(&d_5g1)?;
+        let host_5g2 = dev_ref.dtoh_sync_copy(&d_5g2)?;
 
         let l0 = get_lane_len_asymmetric(enc_n, quantum_salt, w0, w1, w2, 0);
         let l1 = get_lane_len_asymmetric(enc_n, quantum_salt, w0, w1, w2, 1);

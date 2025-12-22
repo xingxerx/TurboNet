@@ -40,21 +40,33 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = rand::thread_rng();
-    
+
     // 1. Level 9: Generate Lattice Keypair (Quantum-Safe)
     let _keys = keypair(&mut rng).expect("Failed to generate Kyber-768 keys");
     println!("🗝️  Lattice Public Key generated. Ready for Handshake.");
-    
+
     // 2. Open listeners for the 3 network bands
-    let _sock_24 = Arc::new(UdpSocket::bind("0.0.0.0:8001").await?);
+    let sock_24 = Arc::new(UdpSocket::bind("0.0.0.0:8001").await?);
     let _sock_5g1 = Arc::new(UdpSocket::bind("0.0.0.0:8002").await?);
     let _sock_5g2 = Arc::new(UdpSocket::bind("0.0.0.0:8003").await?);
 
     println!("📡 Ghost Receiver listening on ports 8001, 8002, 8003...");
 
-    // 3. Logic for fragment reassembly and decryption
-    // In a full implementation, you'll receive the Kyber CT first, 
-    // decapsulate the AES-256 key, then decrypt the incoming shards.
-    
+    // 3. Wait for handshake header (file size)
+    let mut header_buf = [0u8; 8];
+    let (n, addr) = sock_24.recv_from(&mut header_buf).await?;
+    if n != 8 {
+        eprintln!("Handshake header size mismatch: expected 8, got {}", n);
+        return Ok(());
+    }
+    let total_size = u64::from_be_bytes(header_buf) as usize;
+    println!("🔔 Handshake Received! Incoming Payload: {} bytes", total_size);
+
+    // 4. Receive the actual data (simulate with a single UDP packet for now)
+    let mut data_buf = vec![0u8; total_size];
+    let (data_n, _data_addr) = sock_24.recv_from(&mut data_buf).await?;
+    println!("📥 Received {} bytes from {}", data_n, addr);
+
+    // TODO: Pass data_buf to reassembly/decryption logic
     Ok(())
 }
