@@ -7,8 +7,9 @@ fn main() {
     let interfaces = NetworkInterface::show().unwrap();
 
     for interface in interfaces {
-match UdpSocket::bind("192.168.50.97:0") {
-    Ok(_) => println!("✅ ASUS LANE: FOUND (192.168.50.97) - Ready!"),
+let ip = std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set");
+match UdpSocket::bind(format!("{}:0", ip)) {
+    Ok(_) => println!("✅ ASUS LANE: FOUND ({}) - Ready!", ip),
     Err(_) => println!("❌ ASUS LANE: STILL NOT FOUND"),
 }
         

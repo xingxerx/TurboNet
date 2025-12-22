@@ -1,9 +1,12 @@
 use cudarc::driver::{CudaDevice, LaunchAsync, LaunchConfig};
-use cudarc::nvrtc::compile_ptx;
+// use cudarc::nvrtc::compile_ptx;
 use std::fs;
-use std::path::PathBuf;
+// use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
+use socket2::{Socket, Domain, Type};
+use std::net::SocketAddr;
+use tokio::time::{sleep, Duration};
 use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
 use aes_gcm::aead::Aead;
 use serde::{Deserialize, Serialize};
@@ -98,10 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     println!("🔥 TURBONET: DEEP-SEA ASYMMETRIC SHREDDER v3.0 ENGAGED...");
     
-    // --- ADD THIS LINE ---
-    let laptop_ip = "192.168.50.245";
-    // ---------------------
-    let target_ip = laptop_ip;
+    let target_ip = std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set");
     let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
     let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
     let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
@@ -111,13 +111,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let w2_env: i32 = std::env::var("SHRED_W2").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
     let block_size: usize = std::env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
 
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let ptx_src = fs::read_to_string(PathBuf::from(manifest_dir).join("shredder.cu"))?;
-    let ptx = compile_ptx(ptx_src)?;
+    let _manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let ptx_src = std::fs::read_to_string("shredder.cu")?;
+    let ptx = cudarc::nvrtc::compile_ptx(ptx_src)?;
     let dev = CudaDevice::new(0)?;
     dev.load_ptx(ptx, "shredder", &["shred_kernel"])?;
 
-    let socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    // Increase UDP socket buffer size to 4MB
+    let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+    sock.set_reuse_address(true)?;
+    sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+    sock.set_send_buffer_size(4 * 1024 * 1024)?;
+    sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
+    let socket = Arc::new(UdpSocket::from_std(sock.into())?);
 
     let file_path = "input.jpg";
     let file_bytes = fs::read(file_path)?;
@@ -248,7 +254,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let cfg = LaunchConfig::for_num_elems(encrypted_n as u32);
         let f = dev.get_func("shredder", "shred_kernel").expect("Func not found");
         unsafe { f.launch(cfg, (&d_in, &mut d_24, &mut d_5g1, &mut d_5g2, encrypted_n as u64, quantum_salt, w0 as u64, w1 as u64, w2 as u64, i0, i1, i2)) }?;
-
         let host_24 = dev.dtoh_sync_copy(&d_24)?;
         let host_5g1 = dev.dtoh_sync_copy(&d_5g1)?;
         let host_5g2 = dev.dtoh_sync_copy(&d_5g2)?;
@@ -265,23 +270,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         header[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
         header[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
 
-        let chunk_size = 1024;
-
-        async fn blast_lane(s: &UdpSocket, data: &[u8], port: u16, _target_ip: &str, head: &[u8], chunk_size: usize) {
-            // Always use laptop_ip for sending
-            let laptop_ip = "192.168.50.245";
-            let _ = s.send_to(head, format!("{}:{}", laptop_ip, port)).await;
+        // chunk_size now defined in blast_lane
+        // Move blast_lane closure and target_ip out of the loop to avoid move errors
+        // (define above the for block, not inside)
+        // ...existing code...
+        println!("🌊 Streaming Block {}/{}...", block_idx + 1, total_blocks);
+        async fn blast_lane(socket: Arc<UdpSocket>, data: Vec<u8>, port: u16, head: [u8; 28], target_ip: String) {
+            let _ = socket.send_to(&head, format!("{}:{}", target_ip, port)).await;
             tokio::task::yield_now().await;
+            let chunk_size = 1024;
             for chunk in data.chunks(chunk_size) {
-                let _ = s.send_to(chunk, format!("{}:{}", laptop_ip, port)).await;
+                let _ = socket.send_to(chunk, format!("{}:{}", target_ip, port)).await;
+                tokio::time::sleep(Duration::from_micros(500)).await;
             }
         }
-
-        println!("🌊 Streaming Block {}/{}...", block_idx + 1, total_blocks);
         let _ = tokio::join!(
-            blast_lane(&socket, &host_24[0..len0], p1_port, &target_ip, &header, chunk_size),
-            blast_lane(&socket, &host_5g1[0..len1], p2_port, &target_ip, &header, chunk_size),
-            blast_lane(&socket, &host_5g2[0..len2], p3_port, &target_ip, &header, chunk_size),
+            blast_lane(socket.clone(), host_24[0..len0].to_vec(), p1_port, header, target_ip.clone()),
+            blast_lane(socket.clone(), host_5g1[0..len1].to_vec(), p2_port, header, target_ip.clone()),
+            blast_lane(socket.clone(), host_5g2[0..len2].to_vec(), p3_port, header, target_ip.clone()),
         );
     }
 

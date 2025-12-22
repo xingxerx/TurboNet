@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let router_ip = "192.168.50.1"; // Your ASUS Neighborhood
+    let router_ip = &std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set"); // from .env
     let target = format!("{}:8001", router_ip);
     
     // Create a 64KB chunk of "junk" data to flood the pipe
@@ -12,7 +12,8 @@ async fn main() -> std::io::Result<()> {
     let data = Arc::new(junk_data);
     
     // Open the socket
-  let socket = Arc::new(UdpSocket::bind("192.168.50.97:0").await?);
+    let ip = std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set");
+    let socket = Arc::new(UdpSocket::bind(format!("{}:0", ip)).await?);
     
     println!("��� TURBONET SPEED TEST STARTING...");
     println!("Targeting ASUS Lab at {}", target);

@@ -3,7 +3,7 @@ use tokio::net::UdpSocket;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // Router local IP (your "neighborhood")
-    let router_addr = "192.168.50.1"; 
+    let router_addr = &std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set"); // from .env
 
     // Open 3 sockets for our 3 frequency "lanes"
     let sock_24 = UdpSocket::bind("0.0.0.0:0").await?;

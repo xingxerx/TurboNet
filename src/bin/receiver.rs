@@ -1,4 +1,5 @@
 use tokio::net::UdpSocket;
+use socket2::{Socket, Domain, Type};
 use std::env;
 use std::convert::TryInto;
 use std::fs::OpenOptions;
@@ -54,9 +55,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let p3_port = env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string());
     let block_size: usize = env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
 
-    let l1 = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", p1_port)).await?);
-    let l2 = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", p2_port)).await?);
-    let l3 = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", p3_port)).await?);
+    // Increase UDP socket buffer size to 4MB
+    let l1_sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+    l1_sock.set_reuse_address(true)?;
+    l1_sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+    l1_sock.set_send_buffer_size(4 * 1024 * 1024)?;
+    l1_sock.bind(&format!("0.0.0.0:{}", p1_port).parse::<std::net::SocketAddr>()?.into())?;
+    let l1 = Arc::new(UdpSocket::from_std(l1_sock.into())?);
+
+    let l2_sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+    l2_sock.set_reuse_address(true)?;
+    l2_sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+    l2_sock.set_send_buffer_size(4 * 1024 * 1024)?;
+    l2_sock.bind(&format!("0.0.0.0:{}", p2_port).parse::<std::net::SocketAddr>()?.into())?;
+    let l2 = Arc::new(UdpSocket::from_std(l2_sock.into())?);
+
+    let l3_sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+    l3_sock.set_reuse_address(true)?;
+    l3_sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+    l3_sock.set_send_buffer_size(4 * 1024 * 1024)?;
+    l3_sock.bind(&format!("0.0.0.0:{}", p3_port).parse::<std::net::SocketAddr>()?.into())?;
+    let l3 = Arc::new(UdpSocket::from_std(l3_sock.into())?);
 
     println!("📡 HANDSHAKE: Waiting for Shredder to request Lattice Public Key...");
     let mut buf = [0u8; 1024];

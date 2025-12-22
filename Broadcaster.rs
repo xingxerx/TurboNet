@@ -4,7 +4,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 1. Identify your 'Parallel Lab' neighborhood
-    let router_ip = "192.168.50.1"; 
+    let router_ip = &std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set"); // from .env
     
     // 2. Open 3 lanes for your 3 bands (2.4GHz, 5GHz-1, 5GHz-2)
     // We bind to 0.0.0.0:0 to let the OS pick the best local port
