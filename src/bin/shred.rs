@@ -98,7 +98,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
     println!("🔥 TURBONET: DEEP-SEA ASYMMETRIC SHREDDER v3.0 ENGAGED...");
     
-    let target_ip = "192.168.50.245";
+    // --- ADD THIS LINE ---
+    let laptop_ip = "192.168.50.245";
+    // ---------------------
+    let target_ip = laptop_ip;
     let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
     let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
     let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
@@ -264,12 +267,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let chunk_size = 1024;
 
-        async fn blast_lane(s: &UdpSocket, data: &[u8], port: u16, target_ip: &str, head: &[u8], chunk_size: usize) {
-            let _ = s.send_to(head, format!("{}:{}", target_ip, port)).await;
-            // Bandwidth Beast: Performance optimization
+        async fn blast_lane(s: &UdpSocket, data: &[u8], port: u16, _target_ip: &str, head: &[u8], chunk_size: usize) {
+            // Always use laptop_ip for sending
+            let laptop_ip = "192.168.50.245";
+            let _ = s.send_to(head, format!("{}:{}", laptop_ip, port)).await;
             tokio::task::yield_now().await;
             for chunk in data.chunks(chunk_size) {
-                let _ = s.send_to(chunk, format!("{}:{}", target_ip, port)).await;
+                let _ = s.send_to(chunk, format!("{}:{}", laptop_ip, port)).await;
             }
         }
 
