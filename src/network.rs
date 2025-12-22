@@ -1,7 +1,7 @@
 // Suggested update for Broadcaster.rs logic
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
-fn get_wifi_ip() -> Option<String> {
+fn _get_wifi_ip() -> Option<String> {
     let interfaces = NetworkInterface::show().ok()?;
     // Look for the interface we just prioritized in PowerShell
     let wifi = interfaces.iter().find(|iface| iface.name == "Wi-Fi")?;
