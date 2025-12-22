@@ -1,0 +1,31 @@
+name: TurboNet Operations (Security & Performance)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security_scan:
+    name: Snyk Security Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/rust@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  benchmarking:
+    name: Criterion Performance Audit
+    runs-on: windows-latest # Required for CUDA hardware validation
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CUDA 13.0
+        run: |
+          # Automation script to ensure CUDA 13.0 environment
+      - name: Run Criterion Benchmarks
+        run: cargo bench

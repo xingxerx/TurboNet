@@ -9,7 +9,7 @@ fn main() {
     if target_os == "windows" {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
         // Source path for the DLL - hardcoded based on our previous findings
-        let src_dll_path = PathBuf::from(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.0\bin\nvrtc64_120_0.dll"); // adjust version as needed
+        let src_dll_path = PathBuf::from(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin\nvrtc64_130_0.dll"); // updated for CUDA 13.0
         
         // Determine output directory
         let _out_dir = env::var("OUT_DIR").unwrap();
