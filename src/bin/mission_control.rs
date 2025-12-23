@@ -1,7 +1,4 @@
-xing@xing-pc:/mnt/d/TurboNet$ sudo lsof -i -P -n | grep LISTEN
-systemd-r 190 systemd-resolve 15u IPv4 8369 0t0 TCP 127.0.0.53:53 (LISTEN)
-systemd-r 190 systemd-resolve 17u IPv4 8371 0t0 TCP 127.0.0.54:53 (LISTEN)
-xing@xing-pc:/mnt/d/TurboNet$use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use reqwest;
 #[allow(dead_code)]
 #[derive(Serialize)]

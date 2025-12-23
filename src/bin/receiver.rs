@@ -1,3 +1,6 @@
+use dotenvy::dotenv;
+use std::env;
+use local_ip_address::list_afinet_netifas;
 pub struct GhostReassembler {
     pub total_size: usize,
     pub weights: [u64; 3],
@@ -39,6 +42,7 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv().ok();
     let mut rng = rand::thread_rng();
 
     // 1. Level 9: Generate Lattice Keypair (Quantum-Safe)
@@ -46,12 +50,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let public_key = keypair.public;
     println!("🗝️  Lattice Public Key generated. Ready for Handshake.");
 
-    // 2. Open listeners for the 3 network bands
-    let sock_24 = Arc::new(UdpSocket::bind("0.0.0.0:8001").await?);
-    let _sock_5g1 = Arc::new(UdpSocket::bind("0.0.0.0:8002").await?);
-    let _sock_5g2 = Arc::new(UdpSocket::bind("0.0.0.0:8003").await?);
+    // Load IP and ports from .env
+    let listen_ip = env::var("RECEIVER_IP").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let lane1_port = env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string());
+    let lane2_port = env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string());
+    let lane3_port = env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string());
 
-    println!("📡 Ghost Receiver listening on ports 8001, 8002, 8003...");
+    let sock_24 = Arc::new(UdpSocket::bind(format!("{}:{}", listen_ip, lane1_port)).await?);
+    let _sock_5g1 = Arc::new(UdpSocket::bind(format!("{}:{}", listen_ip, lane2_port)).await?);
+    let _sock_5g2 = Arc::new(UdpSocket::bind(format!("{}:{}", listen_ip, lane3_port)).await?);
+
+    println!("📡 Ghost Receiver listening on {}:{} {}:{} {}:{}", listen_ip, lane1_port, listen_ip, lane2_port, listen_ip, lane3_port);
+
+    // Show all local IPs for user visibility
+    if let Ok(netifas) = list_afinet_netifas() {
+        println!("Available local IP addresses:");
+        for (_ifname, ip) in netifas {
+            println!("  {}", ip);
+        }
+    }
 
     loop {
 

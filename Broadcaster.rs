@@ -1,8 +1,16 @@
+use local_ip_address::list_afinet_netifas;
 use tokio::net::UdpSocket;
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+        // Show all local IP addresses for user visibility
+        if let Ok(netifas) = list_afinet_netifas() {
+            println!("Available local IP addresses:");
+            for (_ifname, ip) in netifas {
+                println!("  {}", ip);
+            }
+        }
     // 1. Identify your 'Parallel Lab' neighborhood
     let router_ip = &std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set"); // from .env
 
