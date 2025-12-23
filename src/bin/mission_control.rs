@@ -1,3 +1,4 @@
+use dotenvy;
 use serde::{Deserialize, Serialize};
 use reqwest;
 #[allow(dead_code)]
@@ -43,8 +44,140 @@ async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<AiWeights> {
     None
 }
 // Move this to before impl so it's in scope
-async fn shred_logic_cancel(_tx: mpsc::Sender<MissionEvent>, _path: PathBuf, _ip: String, _cancel_flag: Arc<AtomicBool>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // TODO: Implement cancellation-aware transfer logic here.
+
+use cudarc::driver::{CudaDevice, LaunchAsync, LaunchConfig};
+use tokio::net::UdpSocket;
+use socket2::{Socket, Domain, Type};
+use std::net::SocketAddr;
+use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
+use aes_gcm::aead::Aead;
+use pqc_kyber::*;
+use rand::thread_rng;
+use std::fs;
+
+async fn gui_shred_logic(
+    _tx: mpsc::Sender<MissionEvent>,
+    path: PathBuf,
+    ip: String,
+    cancel_flag: Arc<AtomicBool>,
+    update_progress: Arc<dyn Fn(usize, usize) + Send + Sync>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
+    let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
+    let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
+    let block_size: usize = std::env::var("BLOCK_SIZE").unwrap_or_else(|_| "5242880".to_string()).parse().unwrap();
+    let w0_env: i32 = std::env::var("SHRED_W0").unwrap_or_else(|_| "10".to_string()).parse().unwrap();
+    let w1_env: i32 = std::env::var("SHRED_W1").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
+    let w2_env: i32 = std::env::var("SHRED_W2").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
+
+    let ptx_src = std::fs::read_to_string("shredder.cu")?;
+    let ptx = cudarc::nvrtc::compile_ptx(ptx_src)?;
+    let dev = CudaDevice::new(0)?;
+    dev.load_ptx(ptx, "shredder", &["shred_kernel"])?;
+
+    let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+    sock.set_reuse_address(true)?;
+    sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+    sock.set_send_buffer_size(4 * 1024 * 1024)?;
+    sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
+    let socket = std::sync::Arc::new(UdpSocket::from_std(sock.into())?);
+
+    let file_bytes = fs::read(&path)?;
+    let total_len = file_bytes.len();
+    let total_blocks = (total_len + block_size - 1) / block_size;
+
+    // Handshake
+    socket.send_to(b"PK_REQ", format!("{}:{}", ip, p1_port)).await?;
+    let mut pk_buf = [0u8; KYBER_PUBLICKEYBYTES];
+    let (n, _) = tokio::time::timeout(std::time::Duration::from_secs(5), socket.recv_from(&mut pk_buf)).await??;
+    if n != KYBER_PUBLICKEYBYTES { return Err("Invalid PK size".into()); }
+    let mut rng = thread_rng();
+    let (_ct, shared_secret) = encapsulate(&pk_buf, &mut rng).map_err(|_| "Encapsulation failed")?;
+    let quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
+
+    // Metadata
+    let mut meta = vec![b'M'];
+    let fname = path.file_name().unwrap().to_str().unwrap_or("payload");
+    meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
+    meta.extend_from_slice(fname.as_bytes());
+    meta.extend_from_slice(&(total_len as u64).to_be_bytes());
+    let mut meta_confirmed = false;
+    while !meta_confirmed {
+        socket.send_to(&meta, format!("{}:{}", ip, p1_port)).await?;
+        let mut ack_buf = [0u8; 64];
+        if let Ok(Ok((n, _))) = tokio::time::timeout(std::time::Duration::from_millis(500), socket.recv_from(&mut ack_buf)).await {
+            let msg = String::from_utf8_lossy(&ack_buf[..n]);
+            if msg.starts_with("META_ACK") {
+                meta_confirmed = true;
+            }
+        }
+    }
+
+    // Weights
+    let (w0, w1, w2) = (w0_env, w1_env, w2_env);
+
+    for block_idx in 0..total_blocks {
+        if cancel_flag.load(Ordering::SeqCst) {
+            break;
+        }
+        let start = block_idx * block_size;
+        let end = (start + block_size).min(total_len);
+        let block_data = &file_bytes[start..end];
+
+        let key = Key::<Aes256Gcm>::from_slice(&shared_secret);
+        let cipher = Aes256Gcm::new(key);
+        let mut nonce_bytes = [0u8; 12];
+        nonce_bytes[0..4].copy_from_slice(&(block_idx as u32).to_be_bytes());
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let ciphertext = cipher.encrypt(nonce, block_data).expect("Block encryption failed");
+        let encrypted_n = ciphertext.len();
+
+        let d_in = dev.htod_copy(ciphertext.clone())?;
+        let lane_size = encrypted_n + 1024;
+        let mut d_24 = dev.alloc_zeros::<u8>(lane_size)?;
+        let mut d_5g1 = dev.alloc_zeros::<u8>(lane_size)?;
+        let mut d_5g2 = dev.alloc_zeros::<u8>(lane_size)?;
+
+        let w_total = (w0 + w1 + w2) as u64;
+        let _pattern_offset = quantum_salt % w_total;
+        let i0 = 0u64;
+        let i1 = 0u64;
+        let i2 = 0u64;
+        let cfg = LaunchConfig::for_num_elems(encrypted_n as u32);
+        let f = dev.get_func("shredder", "shred_kernel").expect("Func not found");
+        unsafe { f.launch(cfg, (&d_in, &mut d_24, &mut d_5g1, &mut d_5g2, encrypted_n as u64, quantum_salt, w0 as u64, w1 as u64, w2 as u64, i0, i1, i2)) }?;
+        let host_24 = dev.dtoh_sync_copy(&d_24)?;
+        let host_5g1 = dev.dtoh_sync_copy(&d_5g1)?;
+        let host_5g2 = dev.dtoh_sync_copy(&d_5g2)?;
+
+        let len0 = host_24.len();
+        let len1 = host_5g1.len();
+        let len2 = host_5g2.len();
+
+        let mut header = [0u8; 28];
+        header[0..8].copy_from_slice(&quantum_salt.to_be_bytes());
+        header[8..12].copy_from_slice(&(block_idx as u32).to_be_bytes());
+        header[12..16].copy_from_slice(&(encrypted_n as u32).to_be_bytes());
+        header[16..20].copy_from_slice(&(w0 as u32).to_be_bytes());
+        header[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
+        header[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
+
+        async fn blast_lane(socket: std::sync::Arc<UdpSocket>, data: Vec<u8>, port: u16, head: [u8; 28], ip: String) {
+            let _ = socket.send_to(&head, format!("{}:{}", ip, port)).await;
+            tokio::task::yield_now().await;
+            let chunk_size = 1024;
+            for chunk in data.chunks(chunk_size) {
+                let _ = socket.send_to(chunk, format!("{}:{}", ip, port)).await;
+                tokio::time::sleep(std::time::Duration::from_micros(500)).await;
+            }
+        }
+        let _ = tokio::join!(
+            blast_lane(socket.clone(), host_24[0..len0].to_vec(), p1_port, header, ip.clone()),
+            blast_lane(socket.clone(), host_5g1[0..len1].to_vec(), p2_port, header, ip.clone()),
+            blast_lane(socket.clone(), host_5g2[0..len2].to_vec(), p3_port, header, ip.clone()),
+        );
+        update_progress(block_idx + 1, total_blocks);
+    }
     Ok(())
 }
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -104,15 +237,35 @@ impl MissionControlApp {
         }
     }
 
-    fn run_shredder(&self) {
+    fn run_shredder(&mut self) {
         self.cancel_flag.store(false, Ordering::SeqCst);
+        self.is_blasting = true;
         let tx = self.event_tx.clone();
         let path = self.file_path.clone().unwrap();
         let ip = self.target_ip.clone();
         let cancel_flag = self.cancel_flag.clone();
-        self.runtime.spawn(async move {
-            if let Err(_e) = shred_logic_cancel(tx.clone(), path, ip, cancel_flag).await {
-                let _ = tx.send(MissionEvent::Error).await;
+        let progress = std::sync::Arc::new(std::sync::Mutex::new((self.current_block, self.total_blocks)));
+        let update_progress = {
+            let progress = progress.clone();
+            let ctx = egui::Context::default();
+            std::sync::Arc::new(move |cur, total| {
+                let mut p = progress.lock().unwrap();
+                *p = (cur, total);
+                ctx.request_repaint();
+            }) as Arc<dyn Fn(usize, usize) + Send + Sync>
+        };
+        self.runtime.spawn({
+            let update_progress = update_progress.clone();
+            let mut_self: *mut MissionControlApp = self as *mut MissionControlApp;
+            async move {
+                let res = gui_shred_logic(tx.clone(), path, ip, cancel_flag, update_progress).await;
+                // SAFETY: We know the runtime outlives this future
+                unsafe {
+                    (*mut_self).is_blasting = false;
+                }
+                if let Err(_e) = res {
+                    // Optionally: update GUI with error
+                }
             }
         });
     }
@@ -204,6 +357,8 @@ impl eframe::App for MissionControlApp {
 }
 
 fn main() -> Result<(), eframe::Error> {
+        // Load environment variables from .env
+        dotenvy::dotenv().ok();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([550.0, 700.0])

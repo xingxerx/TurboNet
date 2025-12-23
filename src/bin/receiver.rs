@@ -1,6 +1,5 @@
 use dotenvy::dotenv;
 use std::env;
-use local_ip_address::list_afinet_netifas;
 pub struct GhostReassembler {
     pub total_size: usize,
     pub weights: [u64; 3],
