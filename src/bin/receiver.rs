@@ -62,13 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("📡 Ghost Receiver listening on {}:{} {}:{} {}:{}", listen_ip, lane1_port, listen_ip, lane2_port, listen_ip, lane3_port);
 
-    // Show all local IPs for user visibility
-    if let Ok(netifas) = list_afinet_netifas() {
-        println!("Available local IP addresses:");
-        for (_ifname, ip) in netifas {
-            println!("  {}", ip);
-        }
-    }
+    // (SECURITY) Local IP addresses are now managed via .env and not printed for security reasons.
 
     loop {
 

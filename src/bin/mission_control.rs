@@ -90,7 +90,8 @@ impl MissionControlApp {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         Self {
             file_path: None,
-            target_ip: std::env::var("TURBONET_TARGET_IP").unwrap_or_else(|_| "127.0.0.1".to_string()),
+            // SECURITY: Always use .env for IP, never fallback to hardcoded IP
+            target_ip: std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP must be set in .env for security"),
             lane_rtts: [0.0; 3],
             ai_status: "Awaiting Command...".to_string(),
             current_block: 0,

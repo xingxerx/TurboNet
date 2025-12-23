@@ -1,3 +1,5 @@
+# Ignore .env files containing sensitive IPs
+.env
 # Prevent build artifacts and temporary files from being committed
 /target/
 **/*.rs.bk
