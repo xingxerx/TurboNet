@@ -85,10 +85,37 @@ Or run the built executables directly:
 When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three network ports (`8001`, `8002`, `8003`). An attacker would need to intercept **all three physical bands simultaneously** AND possess a **4000+ qubit Quantum Computer** to compromise the session.
 
 ## 📂 Project Structure
--   `src/bin/mission_control.rs`: The v4.0 GUI Controller.
--   `src/bin/receiver.rs`: The Ghost Receiver.
--   `src/bin/shred.rs`: Legacy Command-Line Shredder.
--   `shredder.cu`: The mathematical "heart"—the CUDA kernel for asymmetric shredding.
+
+### Binaries
+- `src/bin/mission_control.rs`: The v4.0 GUI Controller (AI, dashboard, async UDP).
+- `src/bin/receiver.rs`: The Ghost Receiver (reassembles fragments, quantum handshake).
+- `src/bin/shred.rs`: Legacy Command-Line Shredder (manual blast).
+- `src/bin/Memory-Safe_Listener.rs`: UDP echo node for connection verification.
+- `src/bin/broadcaster.rs`: Multi-band broadcaster (demo, placeholder).
+- `src/bin/check_lanes.rs`: Lane detection utility (Ethernet/Starlink).
+- `src/bin/flood.rs`: UDP flood speed test.
+- `src/bin/scan.rs`: Hardware lane scanner.
+- `src/bin/tokio.rs`: Tokio async demo.
+
+### Core Source Files
+- `src/lib.rs`: Links modules (deepseek_weights, network, shredder).
+- `src/deepseek_weights.rs`: DeepSeek AI weights logic and validation.
+- `src/network.rs`: Lane probing, hardware binding, network interface logic.
+- `src/shredder.rs`: Orchestrates GPU kernel, applies AI weights.
+- `src/crypto.rs`: Quantum session handshake (Kyber, AES-GCM).
+
+### CUDA & PTX
+- `shredder.cu`: CUDA kernel for asymmetric shredding.
+- `shredder.ptx`: Compiled PTX for GPU execution.
+- `build.rs`: Auto-compiles CUDA kernel to PTX.
+
+### Other
+- `Cargo.toml`: Rust dependencies and features.
+- `README.md`: This documentation.
+
+---
+**Available binaries:**
+Memory-Safe_Listener, broadcaster, check_lanes, flood, mission_control, receiver, scan, shred, tokio
 
 ---
 **The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆

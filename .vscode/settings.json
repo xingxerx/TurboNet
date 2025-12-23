@@ -1,5 +1,11 @@
-Information about the current repository. You can use this information when you need to calculate diffs or compare changes with the default branch:
-Repository name: TurboNet
-Owner: xingxerx
-Current branch: main
-Default branch: main
+{
+	"terminal.integrated.gpuAcceleration": "off",
+	"terminal.integrated.inheritEnv": true,
+	"terminal.integrated.defaultProfile.linux": "bash",
+	"terminal.integrated.profiles.linux": {
+		"bash": {
+			"path": "/bin/bash",
+			"args": ["--login"]
+		}
+	}
+}

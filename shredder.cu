@@ -20,12 +20,13 @@ extern "C" __global__ void shred_kernel(
         unsigned long long block_id = effective_idx / W;
         unsigned long long pos_in_block = effective_idx % W;
         
+        // Prevent writing past the allocated buffers
         if (pos_in_block < w0) {
-            band24[block_id * w0 + pos_in_block - i0] = input[idx];
+            band24[block_id * w0 + pos_in_block] = input[idx];
         } else if (pos_in_block < w0 + w1) {
-            band5g1[block_id * w1 + (pos_in_block - w0) - i1] = input[idx];
+            band5g1[block_id * w1 + (pos_in_block - w0)] = input[idx];
         } else {
-            band5g2[block_id * w2 + (pos_in_block - w0 - w1) - i2] = input[idx];
+            band5g2[block_id * w2 + (pos_in_block - w0 - w1)] = input[idx];
         }
     }
 }

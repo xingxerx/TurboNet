@@ -1,24 +1,29 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-// Architectural Design: Isolated Async Task
-pub fn start_mission_control_task(_app_arc: std::sync::Arc<std::sync::Mutex<MissionControlApp>>) {
-    std::thread::spawn(move || {
-        // 1. Initialize Runtime
-        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+use tokio::net::UdpSocket as TokioSocket;
+use std::sync::{Arc, Mutex};
 
-        // 2. Execute Async Block
-        rt.block_on(async {
-            // Logic: Your network/shredder initialization here
-            let res: Result<(), Box<dyn std::error::Error>> = async {
-                // Example: while loop logic
-                // ...existing code for your async logic...
-                Ok(())
-            }.await;
+impl MissionControlApp {
+    pub async fn start_network_loop(app_arc: Arc<Mutex<Self>>) -> Result<(), Box<dyn std::error::Error>> {
+        // Justification: Bind once and use throughout the async task
+        let std_sock = std::net::UdpSocket::bind("0.0.0.0:0")?;
+        std_sock.set_nonblocking(true)?;
+        let socket = TokioSocket::from_std(std_sock)?;
 
-            if let Err(e) = res {
-                eprintln!("[Systems] Mission Control Task Failure: {}", e);
+        let mut pk_buf = [0u8; 1024];
+
+        // Flattened Loop: No deep nesting
+        loop {
+            // Logic: Requesting Metadata
+            socket.send_to(b"PK_REQ", "127.0.0.1:8080").await?;
+
+            // Corrected Error Handling: Double ?? for timeout and recv
+            if let Ok(result) = tokio::time::timeout(std::time::Duration::from_secs(5), socket.recv_from(&mut pk_buf)).await {
+                let (n, _addr) = result?; // Handles the socket error
+                let mut app = app_arc.lock().unwrap();
+                app.process_packet(&pk_buf[..n]);
             }
-        }); // End block_on
-    }); // End thread::spawn
+        }
+    }
 }
 use dotenvy;
 use serde::{Deserialize, Serialize};
@@ -167,9 +172,9 @@ use tokio::sync::mpsc;
 
 #[derive(Deserialize, Debug, Clone)]
 struct AiWeights {
-    w0: i32,
-    w1: i32,
-    w2: i32,
+    w0: u64,
+    w1: u64,
+    w2: u64,
 }
 
 enum MissionEvent {
@@ -218,9 +223,66 @@ impl MissionControlApp {
         }
     }
 
-    fn run_shredder(app_arc: std::sync::Arc<std::sync::Mutex<MissionControlApp>>) {
-        // All async/threaded logic now uses start_mission_control_task
-        start_mission_control_task(app_arc);
+    fn run_shredder(&mut self) {
+        self.is_blasting = true;
+        let tx = self.event_tx.clone();
+        let file_path = self.file_path.clone().unwrap();
+        let target_ip = self.target_ip.clone();
+        let rtts = self.lane_rtts;
+
+        self.runtime.spawn(async move {
+            // 1. AI Strategy Analysis
+            let weights = get_ai_strategy(rtts).await.unwrap_or(AiWeights { w0: 33, w1: 33, w2: 34 });
+            let _ = tx.send(MissionEvent::Status("🧠 AI STRATEGY LOCKED".to_string())).await;
+
+            // 2. Quantum Handshake (UDP Port 8001)
+            let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+            socket.send_to(b"PK_REQ", format!("{}:8001", target_ip)).await.ok();
+            let mut pk_buf = [0u8; 1184];
+            let (n, _) = socket.recv_from(&mut pk_buf).await.unwrap();
+            let (ct, session) = QuantumSession::initiate(&pk_buf[..n]).unwrap();
+            socket.send_to(&ct, format!("{}:8001", target_ip)).await.ok();
+
+            // 3. Physical Shredding (GPU)
+            let raw_data = std::fs::read(file_path).unwrap();
+            let encrypted_data = session.encrypt_payload(&raw_data);
+            let dev = cudarc::driver::CudaDevice::new(0).unwrap();
+            let (b24, b51, b52) = turbonet::shredder::execute_gpu_shred(
+                &dev,
+                &encrypted_data,
+                [weights.w0, weights.w1, weights.w2]
+            ).await.unwrap();
+
+            // 4. Multi-Band Blast
+            socket.send_to(&b24, format!("{}:8001", target_ip)).await.ok();
+            socket.send_to(&b51, format!("{}:8002", target_ip)).await.ok();
+            socket.send_to(&b52, format!("{}:8003", target_ip)).await.ok();
+
+            let _ = tx.send(MissionEvent::Status("🚀 BLAST COMPLETE".to_string())).await;
+        });
+    }
+    // Hardware unification: async GPU shred logic
+    async fn shred_logic_cancel(
+        tx: mpsc::Sender<MissionEvent>,
+        path: PathBuf,
+        ip: String,
+        weights: [u64; 3],
+        cancel_flag: Arc<AtomicBool>
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // 1. Initialize GPU
+        let dev = cudarc::driver::CudaDevice::new(0)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        // 2. Load Payload
+        let payload = std::fs::read(path)?;
+        // 3. Execute CUDA Shredding
+        let (b24, b51, b52) = turbonet::shredder::execute_gpu_shred(&dev, &payload, weights)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        // 4. UDP Blast (Simplification: Sending Lane 0)
+        let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
+        socket.send_to(&b24, format!("{}:8001", ip)).await?;
+        println!("🚀 Quantum Blast Complete. GPU processed {} bytes.", payload.len());
+        Ok(())
     }
     #[allow(dead_code)]
 
@@ -310,27 +372,24 @@ impl eframe::App for MissionControlApp {
     }
 }
 
-fn main() -> Result<(), eframe::Error> {
+#[tokio::main]
+async fn main() {
     // Load environment variables from .env
     dotenvy::dotenv().ok();
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([550.0, 700.0])
-            .with_drag_and_drop(true),
-        ..Default::default()
-    };
-    // Initialize MissionControlApp inside Arc<Mutex<...>> for safe cross-thread access
-    // Removed unused app_arc variable
-    // Pass a clone to the GUI/event loop if needed (for future expansion)
-    eframe::run_native(
-        "TurboNet Mission Control",
-        options,
-        Box::new(|cc| {
-            // The GUI gets its own Arc<Mutex<...>>
-            let app = MissionControlApp::new(cc);
-            Ok(Box::new(app))
-        }),
-    )
+    // 1. Initialize owned state
+    let app = MissionControlApp::new(&eframe::CreationContext::default());
+    let app_arc = Arc::new(Mutex::new(app));
+
+    // 2. Clone for the background network task
+    let net_app_handle = Arc::clone(&app_arc);
+    tokio::spawn(async move {
+        if let Err(e) = MissionControlApp::start_network_loop(net_app_handle).await {
+            eprintln!("[Critical] Network Loop Failure: {}", e);
+        }
+    });
+
+    // 3. Start GUI/Winit on the main thread (Winit must stay on main)
+    // run_gui(app_arc);
 }
 // Helper for correct socket setup: returns a TokioUdpSocket from a std::net::UdpSocket
 #[allow(dead_code)]
