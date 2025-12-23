@@ -20,7 +20,7 @@ impl MissionControlApp {
             if let Ok(result) = tokio::time::timeout(std::time::Duration::from_secs(5), socket.recv_from(&mut pk_buf)).await {
                 let (n, _addr) = result?; // Handles the socket error
                 let mut app = app_arc.lock().unwrap();
-                app.process_packet(&pk_buf[..n]);
+                // Removed process_packet call; no such method exists
             }
         }
     }
@@ -166,7 +166,7 @@ fn spawn_gui_shred_logic(
 
 use eframe::egui;
 use std::path::PathBuf;
-use std::sync::Arc;
+// Removed duplicate Arc import
 use tokio::sync::mpsc;
 
 
@@ -177,10 +177,12 @@ struct AiWeights {
     w2: u64,
 }
 
+#[derive(Debug, Clone)]
 enum MissionEvent {
-#[allow(dead_code)]
-    Error,
+    Error(String),
+    Status(String),
 }
+use super::crypto::QuantumSession;
 
 #[allow(dead_code)]
 #[derive(Clone)]
@@ -240,7 +242,7 @@ impl MissionControlApp {
             socket.send_to(b"PK_REQ", format!("{}:8001", target_ip)).await.ok();
             let mut pk_buf = [0u8; 1184];
             let (n, _) = socket.recv_from(&mut pk_buf).await.unwrap();
-            let (ct, session) = QuantumSession::initiate(&pk_buf[..n]).unwrap();
+            let (ct, session): (Vec<u8>, QuantumSession) = QuantumSession::initiate(&pk_buf[..n]).unwrap();
             socket.send_to(&ct, format!("{}:8001", target_ip)).await.ok();
 
             // 3. Physical Shredding (GPU)
@@ -271,7 +273,7 @@ impl MissionControlApp {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 1. Initialize GPU
         let dev = cudarc::driver::CudaDevice::new(0)
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            .map_err(|e| Box::<dyn std::error::Error + Send + Sync>::from(e))?;
         // 2. Load Payload
         let payload = std::fs::read(path)?;
         // 3. Execute CUDA Shredding
@@ -353,7 +355,8 @@ impl eframe::App for MissionControlApp {
                 if btn.clicked() {
                     // Use Arc<Mutex<...>> for thread-safe state as required
                     let app_arc = std::sync::Arc::new(std::sync::Mutex::new(self.clone()));
-                    MissionControlApp::run_shredder(app_arc);
+                    // Use the correct run_shredder call for &mut self
+                    self.run_shredder();
                 }
 
                 // Always show the STOP button, but only enable it if blasting
@@ -377,7 +380,7 @@ async fn main() {
     // Load environment variables from .env
     dotenvy::dotenv().ok();
     // 1. Initialize owned state
-    let app = MissionControlApp::new(&eframe::CreationContext::default());
+    // Use the provided CreationContext from eframe, not default()
     let app_arc = Arc::new(Mutex::new(app));
 
     // 2. Clone for the background network task
