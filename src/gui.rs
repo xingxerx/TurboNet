@@ -33,6 +33,17 @@ impl eframe::App for MissionControlGui {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_min_height(80.0);
+
+            // Hardware/Environment warning
+            #[cfg(not(target_os = "windows"))]
+            ui.colored_label(egui::Color32::YELLOW, "⚠️ Not running natively on Windows. GPU and network performance may be degraded.");
+            #[cfg(target_os = "windows")]
+            {
+                if cudarc::driver::CudaDevice::new(0).is_err() {
+                    ui.colored_label(egui::Color32::YELLOW, "⚠️ CUDA device not found. Ensure NVIDIA drivers and CUDA Toolkit are installed.");
+                }
+            }
+
             ui.vertical_centered(|ui| {
                 ui.label(egui::RichText::new("📦 THE HANGAR").strong());
                 if ui.button(egui::RichText::new("📂 SELECT TARGET PAYLOAD").size(16.0)).clicked() {

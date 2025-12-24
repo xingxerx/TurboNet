@@ -22,11 +22,11 @@ pub async fn probe_lane(socket: &UdpSocket, target: &str) -> LaneTelemetry {
 // Suggested update for Broadcaster.rs logic
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 
+/// Returns the IPv4 address of the Wi-Fi interface by name ("Wi-Fi")
 fn _get_wifi_ip() -> Option<String> {
     let interfaces = NetworkInterface::show().ok()?;
-    // Look for the interface we just prioritized in PowerShell
+    // Target the interface named "Wi-Fi" (robust to index shifts)
     let wifi = interfaces.iter().find(|iface| iface.name == "Wi-Fi")?;
-    
     wifi.addr.iter().find_map(|addr| {
         if let std::net::IpAddr::V4(ipv4) = addr.ip() {
             Some(ipv4.to_string())
@@ -43,11 +43,15 @@ fn _get_wifi_ip() -> Option<String> {
 /// Heartbeat check for Ethernet lane (ASUS router gateway)
 /// Returns true if the gateway responds to a ping within 100ms
 pub fn check_ethernet_lane_health() -> bool {
-    // Ping the ASUS router directly (192.168.50.1)
+    // Load ASUS gateway IP from environment for security
+    let gateway_ip = match std::env::var("ASUS_GATEWAY_IP") {
+        Ok(ip) if !ip.trim().is_empty() => ip,
+        _ => return false, // Do not fallback to any IP, fail securely
+    };
     // -n 1: only one packet
     // -w 100: 100ms timeout for high-speed gaming router response
     let status = Command::new("ping")
-        .args(["-n", "1", "-w", "100", "192.168.50.1"])
+        .args(["-n", "1", "-w", "100", &gateway_ip])
         .status();
 
     match status {

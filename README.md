@@ -27,7 +27,11 @@ A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT
 
 ---
 
+
 ## 🚦 How to Run the Suite
+
+> **Important:** For full GPU and network performance, always run TurboNet natively on Windows. WSL2 is not recommended for production use due to limited hardware passthrough and routing issues.
+
 
 ### 1. Prerequisites
 -   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
@@ -41,11 +45,29 @@ The receiver must be running first to generate the lattice keypair and listen fo
 ./target/release/receiver.exe <TOTAL_BYTES>
 ```
 
+
 ### 3. Launch Mission Control (The Controller)
-Open the GUI dashboard to manage the mission.
-```bash
+Open the GUI dashboard to manage the mission. **Run this from Windows PowerShell or Command Prompt, not WSL.**
+```powershell
+cd D:\TurboNet
+cargo clean
+cargo build --release --bin mission_control
+$env:OLLAMA_MODEL="deepseek-r1:8b"
 ./target/release/mission_control.exe
 ```
+
+---
+
+### ⚠️ WSL2/X11 Troubleshooting (Advanced)
+If you must run the GUI from WSL2, set your DISPLAY to the Windows host bridge IP:
+
+```bash
+grep nameserver /etc/resolv.conf | awk '{print $2}'
+export DISPLAY=YOUR_NAMESERVER_IP:0.0
+export LIBGL_ALWAYS_SOFTWARE=1
+cargo run --release --bin mission_control --
+```
+> **Note:** WSL2 will not provide full GPU or network performance. CUDA and 2.5Gbps Ethernet are only available natively on Windows.
 
 ---
 
@@ -78,6 +100,15 @@ Or run the built executables directly:
     -   Handshake: Derives session entropy via Kyber shards.
     -   AI Strategy: DeepSeek-R1 decides the lane distribution.
     -   Streaming: CUDA shards and encrypts data in real-time.
+
+---
+
+## ⚡ Hardware/Environment Warning
+
+> **For best results:**
+> - Run all TurboNet binaries from Windows, not WSL.
+> - Ensure NVIDIA drivers and CUDA Toolkit are installed on Windows.
+> - Your 2.5Gbps Ethernet and GPU will only be fully utilized when running natively.
 
 ---
 

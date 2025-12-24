@@ -59,7 +59,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _sock_5g1 = Arc::new(UdpSocket::bind(format!("{}:{}", listen_ip, lane2_port)).await?);
     let _sock_5g2 = Arc::new(UdpSocket::bind(format!("{}:{}", listen_ip, lane3_port)).await?);
 
-    println!("📡 Ghost Receiver listening on {}:{} {}:{} {}:{}", listen_ip, lane1_port, listen_ip, lane2_port, listen_ip, lane3_port);
+    // Print the actual local IP address for user clarity (target the 2.5Gbps Ethernet lane)
+    use network_interface::{NetworkInterface, NetworkInterfaceConfig};
+    let local_ip = NetworkInterface::show()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|iface| iface.name == "Ethernet") // Target the 2.5Gbps lane
+        .and_then(|iface| iface.addr.into_iter().find(|addr| addr.ip().is_ipv4()))
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|| "127.0.0.1".to_string());
+    println!("📡 RECEIVER STACK ACTIVE: Listening on {}:{} {}:{} {}:{}", local_ip, lane1_port, local_ip, lane2_port, local_ip, lane3_port);
+    println!("👉 Use RECEIVER IP: {} in Mission Control GUI.", local_ip);
 
     // (SECURITY) Local IP addresses are now managed via .env and not printed for security reasons.
 
