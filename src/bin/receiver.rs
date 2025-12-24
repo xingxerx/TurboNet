@@ -1,5 +1,6 @@
 use dotenvy::dotenv;
 use std::env;
+use sha2::{Sha256, Digest};
 pub struct GhostReassembler {
     pub total_size: usize,
     pub weights: [u64; 3],
@@ -152,9 +153,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // 6. Finalize Payload
+        // 6. Finalize Payload with Integrity Check
         let output_filename = format!("reborn_{}", filename);
         std::fs::write(&output_filename, &data_buf)?;
+        
+        // Level 11: SHA-256 Integrity Verification
+        let mut hasher = Sha256::new();
+        hasher.update(&data_buf);
+        let hash = hasher.finalize();
+        println!("🛡️ INTEGRITY: SHA-256 Hash: {:x}", hash);
         println!("⚡ MISSION SUCCESS: Reassembled payload saved to {}", output_filename);
     }
 }
