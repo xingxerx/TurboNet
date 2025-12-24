@@ -10,8 +10,8 @@ use std::net::SocketAddr;
 
 enum GuiUpdate {
     Status(String),
-    Rtts([f64; 3]),
-    Weights((u64, u64, u64)),
+    // Rtts([f64; 3]), // Unused in bypass mode
+    // Weights((u64, u64, u64)), // Unused in bypass mode
     Progress { current: usize, total: usize },
     Error(String),
     Finished,
@@ -73,8 +73,8 @@ impl eframe::App for MissionControlGui {
             while let Ok(update) = rx.try_recv() {
                 match update {
                     GuiUpdate::Status(s) => self.ai_status = s,
-                    GuiUpdate::Rtts(r) => self.lane_rtts = r,
-                    GuiUpdate::Weights(w) => self.ai_weights = Some(w),
+                    // GuiUpdate::Rtts(r) => self.lane_rtts = r,
+                    // GuiUpdate::Weights(w) => self.ai_weights = Some(w),
                     GuiUpdate::Progress { current, total } => {
                         self.current_block = current;
                         self.total_blocks = total;

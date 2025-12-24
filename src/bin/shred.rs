@@ -4,10 +4,11 @@ use std::sync::Arc;
 use tokio::net::UdpSocket;
 use socket2::{Socket, Domain, Type};
 use std::net::SocketAddr;
-use tokio::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use pqc_kyber::*;
 use std::convert::TryInto;
+use turbonet::deepseek_weights::DeepSeekWeights;
 
 #[derive(Serialize)]
 struct OllamaRequest {
@@ -22,21 +23,17 @@ struct OllamaResponse {
     response: String,
 }
 
-#[derive(Deserialize, Debug)]
-struct AiWeights {
-    w0: i32,
-    w1: i32,
-    w2: i32,
-}
 
 
-async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<AiWeights> {
+
+async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<DeepSeekWeights> {
     let client = reqwest::Client::new();
     let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "deepseek-r1:8b".to_string());
     
     let prompt = format!(
         "Return a JSON object with weights for Lane 0, 1, and 2 based on these RTTs: Lane 0: {:.2}ms, Lane 1: {:.2}ms, Lane 2: {:.2}ms. \
         The weights must sum to 100. Lower RTT = higher weight. \
+        Response MUST be strictly JSON. \
         Example: {{\"w0\": 10, \"w1\": 45, \"w2\": 45}}.",
         rtt_data[0] * 1000.0, rtt_data[1] * 1000.0, rtt_data[2] * 1000.0
     );
@@ -54,8 +51,13 @@ async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<AiWeights> {
     {
         Ok(Ok(resp)) => {
             if let Ok(json_resp) = resp.json::<OllamaResponse>().await {
-                if let Ok(weights) = serde_json::from_str::<AiWeights>(&json_resp.response) {
-                    return Some(weights);
+                // Use robust parser from library
+                match DeepSeekWeights::from_raw_response(&json_resp.response) {
+                    Ok(weights) => {
+                         println!("🧠 DEEPSEEK THOUGHTS: Processed successfully.");
+                         return Some(weights);
+                    },
+                    Err(e) => println!("❌ PARSE ERROR: {}", e),
                 }
             }
         }
@@ -171,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("🧠 NEURAL STRATEGIST: Consulting {} for strategic distribution...", model);
             if let Some(ai_weights) = get_ai_strategy(rtts).await {
                 println!("🤖 AI RECOMMENDATION: {:?}", ai_weights);
-                (ai_weights.w0, ai_weights.w1, ai_weights.w2)
+                (ai_weights.w0 as i32, ai_weights.w1 as i32, ai_weights.w2 as i32)
             } else {
                 println!("⚠️ NEURAL TIMEOUT: Falling back to mathematical Auto-Pilot.");
                 let scores: Vec<f64> = rtts.iter().map(|r| 1.0 / r.max(0.001)).collect();
@@ -215,11 +217,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         socket.send_to(&header, format!("{}:{}", target_ip, p1_port)).await?;
         tokio::task::yield_now().await;
         
-        // Send data in chunks
-        let chunk_size = 1024;
+        // Send data in chunks (10µs delay prevents UDP buffer overflow)
+        let chunk_size = 60000;
         for chunk in block_data.chunks(chunk_size) {
             socket.send_to(chunk, format!("{}:{}", target_ip, p1_port)).await?;
-            tokio::time::sleep(Duration::from_micros(500)).await;
+            tokio::time::sleep(std::time::Duration::from_micros(10)).await;
         }
     }
 

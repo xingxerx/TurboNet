@@ -121,6 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 5. Receive Fragments with Header Stripping
         let mut data_buf = vec![0u8; total_size];
         let mut received = 0;
+        let mut last_log = 0;
         println!("🚀 BLAST START: Expecting {} bytes...", total_size);
 
         while received < total_size {
@@ -144,7 +145,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data_buf[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
                 received += to_copy;
                 
-                if received % (1024 * 1024 * 10) == 0 || received == total_size { // Log every 10MB
+                if received >= last_log + (1024 * 1024 * 10) || received == total_size { 
+                    last_log = received;
                     println!("🚀 Progress: {}/{} bytes ({:.1}%)", received, total_size, (received as f64 / total_size as f64) * 100.0);
                 }
             }
