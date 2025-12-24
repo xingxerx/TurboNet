@@ -1,14 +1,10 @@
-use cudarc::driver::{CudaDevice, LaunchAsync, LaunchConfig};
-// use cudarc::nvrtc::compile_ptx;
+use cudarc::driver::CudaDevice;
 use std::fs;
-// use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use socket2::{Socket, Domain, Type};
 use std::net::SocketAddr;
 use tokio::time::Duration;
-use aes_gcm::{Aes256Gcm, Key, Nonce, KeyInit};
-use aes_gcm::aead::Aead;
 use serde::{Deserialize, Serialize};
 use pqc_kyber::*;
 use std::convert::TryInto;
@@ -33,34 +29,6 @@ struct AiWeights {
     w2: i32,
 }
 
-fn get_hits(t: u64, w_total: u64, w_target: u64, offset: u64) -> u64 {
-    if t == 0 { return 0; }
-    let cycles = t / w_total;
-    let rem = t % w_total;
-    let mut hits = cycles * w_target;
-    if rem > offset {
-        hits += (rem - offset).min(w_target);
-    }
-    hits
-}
-
-fn get_lane_len_asymmetric(n: usize, salt: u64, w0: i32, w1: i32, w2: i32, lane: i32) -> usize {
-    let w_total = (w0 + w1 + w2) as u64;
-    let pattern_offset = salt % w_total;
-    let t_start = pattern_offset;
-    let t_end = pattern_offset + n as u64;
-    
-    let (w_target, offset) = match lane {
-        0 => (w0 as u64, 0u64),
-        1 => (w1 as u64, w0 as u64),
-        2 => (w2 as u64, (w0 + w1) as u64),
-        _ => unreachable!(),
-    };
-
-    let hits_end = get_hits(t_end, w_total, w_target, offset);
-    let hits_start = get_hits(t_start, w_total, w_target, offset);
-    (hits_end - hits_start) as usize
-}
 
 async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<AiWeights> {
     let client = reqwest::Client::new();
