@@ -1,5 +1,4 @@
-mod gui;
-use gui::MissionControlGui;
+use turbonet::gui::MissionControlGui;
 
 fn main() {
     dotenvy::dotenv().ok();

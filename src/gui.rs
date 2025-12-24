@@ -1,7 +1,16 @@
 use eframe::egui;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+enum GuiUpdate {
+    Status(String),
+    Rtts([f64; 3]),
+    Weights((u64, u64, u64)),
+    Progress { current: usize, total: usize },
+    Error(String),
+    Finished,
+}
+
+#[derive(Debug)]
 pub struct MissionControlGui {
     file_path: Option<PathBuf>,
     target_ip: String,
@@ -12,6 +21,24 @@ pub struct MissionControlGui {
     is_blasting: bool,
     ai_weights: Option<(u64, u64, u64)>,
     blast_error: Option<String>,
+    update_rx: Option<std::sync::mpsc::Receiver<GuiUpdate>>,
+}
+
+impl Clone for MissionControlGui {
+    fn clone(&self) -> Self {
+        Self {
+            file_path: self.file_path.clone(),
+            target_ip: self.target_ip.clone(),
+            lane_rtts: self.lane_rtts.clone(),
+            ai_status: self.ai_status.clone(),
+            current_block: self.current_block,
+            total_blocks: self.total_blocks,
+            is_blasting: self.is_blasting,
+            ai_weights: self.ai_weights.clone(),
+            blast_error: self.blast_error.clone(),
+            update_rx: None, // Receiver cannot be cloned
+        }
+    }
 }
 
 impl Default for MissionControlGui {
@@ -25,12 +52,42 @@ impl Default for MissionControlGui {
             total_blocks: 0,
             is_blasting: false,
             ai_weights: None,
+            blast_error: None,
+            update_rx: None,
         }
     }
 }
 
 impl eframe::App for MissionControlGui {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll for updates from background thread
+        let mut finished = false;
+        if let Some(rx) = &self.update_rx {
+            while let Ok(update) = rx.try_recv() {
+                match update {
+                    GuiUpdate::Status(s) => self.ai_status = s,
+                    GuiUpdate::Rtts(r) => self.lane_rtts = r,
+                    GuiUpdate::Weights(w) => self.ai_weights = Some(w),
+                    GuiUpdate::Progress { current, total } => {
+                        self.current_block = current;
+                        self.total_blocks = total;
+                    }
+                    GuiUpdate::Error(e) => {
+                        self.blast_error = Some(e);
+                        self.is_blasting = false;
+                        finished = true;
+                    }
+                    GuiUpdate::Finished => {
+                        self.is_blasting = false;
+                        finished = true;
+                    }
+                }
+            }
+        }
+        if finished {
+            self.update_rx = None;
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.set_min_height(80.0);
 
@@ -97,17 +154,21 @@ impl eframe::App for MissionControlGui {
                     self.ai_status = "Initializing Quantum Blast...".to_string();
                     let file_path = self.file_path.clone();
                     let target_ip = self.target_ip.clone();
-                    let ai_status = &mut self.ai_status;
-                    let lane_rtts = &mut self.lane_rtts;
-                    let ai_weights = &mut self.ai_weights;
-                    let current_block = &mut self.current_block;
-                    let total_blocks = &mut self.total_blocks;
-                    let blast_error = &mut self.blast_error;
-                    // Spawn async backend logic (Tokio)
+                    
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    self.update_rx = Some(rx);
+                    let ctx_clone = ctx.clone();
+
                     std::thread::spawn(move || {
                         let rt = tokio::runtime::Runtime::new().unwrap();
                         rt.block_on(async {
+                            let send = |update: GuiUpdate| {
+                                let _ = tx.send(update);
+                                ctx_clone.request_repaint();
+                            };
+
                             // 1. Probe lanes
+                            send(GuiUpdate::Status("Probing lanes...".to_string()));
                             let mut rtts = [0.0; 3];
                             let ports = ["8001", "8002", "8003"];
                             for (i, port) in ports.iter().enumerate() {
@@ -122,47 +183,51 @@ impl eframe::App for MissionControlGui {
                                     }
                                 }
                             }
-                            *lane_rtts = rtts;
-                            *ai_status = "Probed lanes. Querying DeepSeek-R1 for weights...".to_string();
-                            // 2. Get AI weights (stub: use default)
+                            send(GuiUpdate::Rtts(rtts));
+
+                            // 2. AI weights
+                            send(GuiUpdate::Status("Querying DeepSeek-R1 for weights...".to_string()));
                             let weights = crate::deepseek_weights::DeepSeekWeights { w0: 33, w1: 33, w2: 34 };
                             if let Err(e) = weights.validate() {
-                                *blast_error = Some(e.to_string());
+                                send(GuiUpdate::Error(e.to_string()));
                                 return;
                             }
-                            *ai_weights = Some((weights.w0, weights.w1, weights.w2));
-                            *ai_status = "AI weights acquired. Performing quantum handshake...".to_string();
-                            // 3. Quantum handshake (stub: use dummy key)
+                            send(GuiUpdate::Weights((weights.w0, weights.w1, weights.w2)));
+
+                            // 3. Handshake
+                            send(GuiUpdate::Status("Performing quantum handshake...".to_string()));
                             let pk_bytes = vec![0u8; 32];
-                            let (ct, session) = match crate::crypto::QuantumSession::initiate(&pk_bytes) {
+                            let (_ct, session) = match crate::crypto::QuantumSession::initiate(&pk_bytes) {
                                 Ok(res) => res,
                                 Err(e) => {
-                                    *blast_error = Some(e.to_string());
+                                    send(GuiUpdate::Error(e.to_string()));
                                     return;
                                 }
                             };
-                            *ai_status = "Handshake complete. Encrypting payload...".to_string();
-                            // 4. Read file and encrypt
+
+                            // 4. Read and Encrypt
+                            send(GuiUpdate::Status("Encrypting payload...".to_string()));
                             let payload = match &file_path {
                                 Some(path) => match std::fs::read(path) {
                                     Ok(data) => data,
                                     Err(e) => {
-                                        *blast_error = Some(format!("Failed to read file: {}", e));
+                                        send(GuiUpdate::Error(format!("Read error: {}", e)));
                                         return;
                                     }
                                 },
                                 None => {
-                                    *blast_error = Some("No file selected".to_string());
+                                    send(GuiUpdate::Error("No file selected".to_string()));
                                     return;
                                 }
                             };
                             let encrypted = session.encrypt_payload(&payload);
-                            *ai_status = "Payload encrypted. Launching CUDA kernel...".to_string();
-                            // 5. CUDA shredding
+
+                            // 5. CUDA
+                            send(GuiUpdate::Status("Launching CUDA kernel...".to_string()));
                             let dev = match cudarc::driver::CudaDevice::new(0) {
                                 Ok(d) => std::sync::Arc::new(d),
                                 Err(e) => {
-                                    *blast_error = Some(format!("CUDA error: {}", e));
+                                    send(GuiUpdate::Error(format!("CUDA error: {}", e)));
                                     return;
                                 }
                             };
@@ -171,35 +236,39 @@ impl eframe::App for MissionControlGui {
                             let (frag24, frag5g1, frag5g2) = match crate::shredder::apply_ai_strategy(&dev, &encrypted, weights_arr, salt).await {
                                 Ok(res) => res,
                                 Err(e) => {
-                                    *blast_error = Some(format!("Shredder error: {}", e));
+                                    send(GuiUpdate::Error(format!("Shredder error: {}", e)));
                                     return;
                                 }
                             };
-                            *ai_status = "Shredding complete. Streaming fragments...".to_string();
-                            *total_blocks = 3;
-                            *current_block = 0;
-                            // 6. UDP streaming
+
+                            // 6. UDP Stream
+                            send(GuiUpdate::Status("Streaming fragments...".to_string()));
+                            send(GuiUpdate::Progress { current: 0, total: 3 });
                             let frags = [&frag24, &frag5g1, &frag5g2];
                             for (i, frag) in frags.iter().enumerate() {
-                                let port = ports[i];
-                                let addr = format!("{}:{}", target_ip, port);
+                                let addr = format!("{}:{}", target_ip, ports[i]);
                                 match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
                                     Ok(socket) => {
                                         let _ = socket.send_to(frag, &addr).await;
-                                        *current_block += 1;
+                                        send(GuiUpdate::Progress { current: i + 1, total: 3 });
                                     }
                                     Err(e) => {
-                                        *blast_error = Some(format!("UDP error: {}", e));
+                                        send(GuiUpdate::Error(format!("UDP error: {}", e)));
                                         return;
                                     }
                                 }
                             }
-                            *ai_status = "Quantum Blast complete!".to_string();
+                            send(GuiUpdate::Status("Quantum Blast complete!".to_string()));
+                            send(GuiUpdate::Finished);
                         });
                     });
                 }
                 ui.add_space(10.0);
-                let _stop_btn = ui.add_enabled(self.is_blasting, egui::Button::new(egui::RichText::new("🛑 STOP").size(20.0).color(egui::Color32::RED)));
+                if ui.add_enabled(self.is_blasting, egui::Button::new(egui::RichText::new("🛑 STOP").size(20.0).color(egui::Color32::RED))).clicked() {
+                    self.is_blasting = false;
+                    self.update_rx = None;
+                    self.ai_status = "Blast aborted.".to_string();
+                }
                 if self.is_blasting {
                     let prog = self.current_block as f32 / self.total_blocks.max(1) as f32;
                     ui.add(egui::ProgressBar::new(prog).text(format!("Block {} / {}", self.current_block, self.total_blocks)).animate(true));

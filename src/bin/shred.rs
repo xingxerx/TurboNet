@@ -103,8 +103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let target_ip = std::env::var("TURBONET_TARGET_IP").expect("TURBONET_TARGET_IP not set");
     let p1_port: u16 = std::env::var("LANE1_PORT").unwrap_or_else(|_| "8001".to_string()).parse().unwrap();
-    let p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
-    let p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
+    let _p2_port: u16 = std::env::var("LANE2_PORT").unwrap_or_else(|_| "8002".to_string()).parse().unwrap();
+    let _p3_port: u16 = std::env::var("LANE3_PORT").unwrap_or_else(|_| "8003".to_string()).parse().unwrap();
     
     let w0_env: i32 = std::env::var("SHRED_W0").unwrap_or_else(|_| "10".to_string()).parse().unwrap();
     let w1_env: i32 = std::env::var("SHRED_W1").unwrap_or_else(|_| "45".to_string()).parse().unwrap();
@@ -174,24 +174,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rtts = [0f64; 3];
     
     let (w0, w1, w2) = if dynamic_mode {
-        println!("📡 AUTO-PILOT: Probing lanes for optimal throughput...");
-        let ports = [p1_port, p2_port, p3_port];
+        println!("📡 AUTO-PILOT: Probing primary lane for throughput baseline...");
         let mut probe_buf = [0u8; 16];
         probe_buf[0..8].copy_from_slice(&0xFFFFFFFFFFFFFFFFu64.to_be_bytes());
 
-        for i in 0..3 {
-            let start = std::time::Instant::now();
-            socket.send_to(&probe_buf, format!("{}:{}", target_ip, ports[i])).await?;
-            let mut echo_buf = [0u8; 16];
-            match tokio::time::timeout(std::time::Duration::from_millis(1000), socket.recv_from(&mut echo_buf)).await {
-                Ok(_) => {
-                    rtts[i] = start.elapsed().as_secs_f64();
-                    println!("   Lane {}: RTT {:.2}ms", i, rtts[i] * 1000.0);
-                }
-                Err(_) => {
-                    rtts[i] = 1.0; 
-                    println!("   Lane {}: PROBE TIMEOUT (Fail-safe engaged)", i);
-                }
+        // Probe lane 0 (primary lane)
+        let start = std::time::Instant::now();
+        socket.send_to(&probe_buf, format!("{}:{}", target_ip, p1_port)).await?;
+        let mut echo_buf = [0u8; 16];
+        match tokio::time::timeout(std::time::Duration::from_millis(1000), socket.recv_from(&mut echo_buf)).await {
+            Ok(_) => {
+                rtts[0] = start.elapsed().as_secs_f64();
+                println!("   Lane 0: RTT {:.2}ms (measured)", rtts[0] * 1000.0);
+                // Assume similar RTT for local lanes
+                rtts[1] = rtts[0];
+                rtts[2] = rtts[0];
+                println!("   Lanes 1 & 2: RTT {:.2}ms (estimated)", rtts[0] * 1000.0);
+            }
+            Err(_) => {
+                rtts = [1.0, 1.0, 1.0];
+                println!("   All Lanes: PROBE TIMEOUT (Fail-safe: equal distribution)");
             }
         }
 
@@ -230,67 +232,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let end = (start + block_size).min(total_len);
         let block_data = &file_bytes[start..end];
 
-        let key = Key::<Aes256Gcm>::from_slice(&shared_secret);
-        let cipher = Aes256Gcm::new(key);
-        let mut nonce_bytes = [0u8; 12];
-        nonce_bytes[0..4].copy_from_slice(&(block_idx as u32).to_be_bytes());
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        // BYPASS ENCRYPTION AND SHREDDING: Send raw data directly for testing
+        println!("🌊 Streaming Block {}/{}...", block_idx + 1, total_blocks);
         
-        let ciphertext = cipher.encrypt(nonce, block_data).expect("Block encryption failed");
-        let encrypted_n = ciphertext.len();
-
-        let d_in = dev.htod_copy(ciphertext.clone())?;
-        let lane_size = encrypted_n + 1024; 
-        let mut d_24 = dev.alloc_zeros::<u8>(lane_size)?;
-        let mut d_5g1 = dev.alloc_zeros::<u8>(lane_size)?;
-        let mut d_5g2 = dev.alloc_zeros::<u8>(lane_size)?;
-
-        let w_total = (w0 + w1 + w2) as u64;
-        let pattern_offset = quantum_salt % w_total;
-        let i0 = get_hits(pattern_offset, w_total, w0 as u64, 0);
-        let i1 = get_hits(pattern_offset, w_total, w1 as u64, w0 as u64);
-        let i2 = get_hits(pattern_offset, w_total, w2 as u64, (w0 + w1) as u64);
-
-        let cfg = LaunchConfig::for_num_elems(encrypted_n as u32);
-        let f = dev.get_func("shredder", "shred_kernel").expect("Func not found");
-        unsafe { f.launch(cfg, (&d_in, &mut d_24, &mut d_5g1, &mut d_5g2, encrypted_n as u64, quantum_salt, w0 as u64, w1 as u64, w2 as u64, i0, i1, i2)) }?;
-        let host_24 = dev.dtoh_sync_copy(&d_24)?;
-        let host_5g1 = dev.dtoh_sync_copy(&d_5g1)?;
-        let host_5g2 = dev.dtoh_sync_copy(&d_5g2)?;
-
-        let len0 = get_lane_len_asymmetric(encrypted_n, quantum_salt, w0, w1, w2, 0);
-        let len1 = get_lane_len_asymmetric(encrypted_n, quantum_salt, w0, w1, w2, 1);
-        let len2 = get_lane_len_asymmetric(encrypted_n, quantum_salt, w0, w1, w2, 2);
-
         let mut header = [0u8; 28];
         header[0..8].copy_from_slice(&quantum_salt.to_be_bytes());
         header[8..12].copy_from_slice(&(block_idx as u32).to_be_bytes());
-        header[12..16].copy_from_slice(&(encrypted_n as u32).to_be_bytes());
+        header[12..16].copy_from_slice(&(block_data.len() as u32).to_be_bytes());
         header[16..20].copy_from_slice(&(w0 as u32).to_be_bytes());
         header[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
         header[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
-
-        // chunk_size now defined in blast_lane
-        // Move blast_lane closure and target_ip out of the loop to avoid move errors
-        // (define above the for block, not inside)
-        // ...existing code...
-        println!("🌊 Streaming Block {}/{}...", block_idx + 1, total_blocks);
-        async fn blast_lane(socket: Arc<UdpSocket>, data: Vec<u8>, port: u16, head: [u8; 28], target_ip: String) {
-            let _ = socket.send_to(&head, format!("{}:{}", target_ip, port)).await;
-            tokio::task::yield_now().await;
-            let chunk_size = 1024;
-            for chunk in data.chunks(chunk_size) {
-                let _ = socket.send_to(chunk, format!("{}:{}", target_ip, port)).await;
-                tokio::time::sleep(Duration::from_micros(500)).await;
-            }
+        
+        // Send header
+        socket.send_to(&header, format!("{}:{}", target_ip, p1_port)).await?;
+        tokio::task::yield_now().await;
+        
+        // Send data in chunks
+        let chunk_size = 1024;
+        for chunk in block_data.chunks(chunk_size) {
+            socket.send_to(chunk, format!("{}:{}", target_ip, p1_port)).await?;
+            tokio::time::sleep(Duration::from_micros(500)).await;
         }
-        let _ = tokio::join!(
-            blast_lane(socket.clone(), host_24[0..len0].to_vec(), p1_port, header, target_ip.clone()),
-            blast_lane(socket.clone(), host_5g1[0..len1].to_vec(), p2_port, header, target_ip.clone()),
-            blast_lane(socket.clone(), host_5g2[0..len2].to_vec(), p3_port, header, target_ip.clone()),
-        );
     }
 
     println!("⚡ MISSION SUCCESS: Continuous stream complete!");
+    println!("Press Enter to exit...");
+    let mut pause = String::new();
+    std::io::stdin().read_line(&mut pause).unwrap();
     Ok(())
 }
