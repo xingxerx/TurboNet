@@ -1,5 +1,12 @@
 use eframe::egui;
 use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::net::UdpSocket;
+use std::time::Duration;
+use pqc_kyber::*;
+use std::convert::TryInto;
+use socket2::{Socket, Domain, Type};
+use std::net::SocketAddr;
 
 enum GuiUpdate {
     Status(String),
@@ -167,46 +174,19 @@ impl eframe::App for MissionControlGui {
                                 ctx_clone.request_repaint();
                             };
 
-                            // 1. Probe lanes
-                            send(GuiUpdate::Status("Probing lanes...".to_string()));
-                            let mut rtts = [0.0; 3];
-                            let ports = ["8001", "8002", "8003"];
-                            for (i, port) in ports.iter().enumerate() {
-                                let addr = format!("{}:{}", target_ip, port);
-                                match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
-                                    Ok(socket) => {
-                                        let telemetry = crate::network::probe_lane(&socket, &addr).await;
-                                        rtts[i] = telemetry.rtt.as_secs_f64();
-                                    }
-                                    Err(_) => {
-                                        rtts[i] = 999.0;
-                                    }
-                                }
-                            }
-                            send(GuiUpdate::Rtts(rtts));
+                            // Config
+                            let p1_port = "8001";
+                            let target_addr = format!("{}:{}", target_ip, p1_port);
 
-                            // 2. AI weights
-                            send(GuiUpdate::Status("Querying DeepSeek-R1 for weights...".to_string()));
-                            let weights = crate::deepseek_weights::DeepSeekWeights { w0: 33, w1: 33, w2: 34 };
-                            if let Err(e) = weights.validate() {
-                                send(GuiUpdate::Error(e.to_string()));
-                                return;
-                            }
-                            send(GuiUpdate::Weights((weights.w0, weights.w1, weights.w2)));
+                            // Setup Socket
+                            let sock = Socket::new(Domain::IPV4, Type::DGRAM, None).unwrap();
+                            sock.set_reuse_address(true).unwrap();
+                            sock.set_recv_buffer_size(4 * 1024 * 1024).unwrap();
+                            sock.set_send_buffer_size(4 * 1024 * 1024).unwrap();
+                            sock.bind(&"0.0.0.0:0".parse::<SocketAddr>().unwrap().into()).unwrap();
+                            let socket = Arc::new(UdpSocket::from_std(sock.into()).unwrap());
 
-                            // 3. Handshake
-                            send(GuiUpdate::Status("Performing quantum handshake...".to_string()));
-                            let pk_bytes = vec![0u8; 32];
-                            let (_ct, session) = match crate::crypto::QuantumSession::initiate(&pk_bytes) {
-                                Ok(res) => res,
-                                Err(e) => {
-                                    send(GuiUpdate::Error(e.to_string()));
-                                    return;
-                                }
-                            };
-
-                            // 4. Read and Encrypt
-                            send(GuiUpdate::Status("Encrypting payload...".to_string()));
+                            // Read File
                             let payload = match &file_path {
                                 Some(path) => match std::fs::read(path) {
                                     Ok(data) => data,
@@ -220,45 +200,94 @@ impl eframe::App for MissionControlGui {
                                     return;
                                 }
                             };
-                            let encrypted = session.encrypt_payload(&payload);
+                            let total_len = payload.len();
+                            let block_size = 5242880; // 5MB
+                            let total_blocks = (total_len + block_size - 1) / block_size;
+                            send(GuiUpdate::Progress { current: 0, total: total_blocks });
 
-                            // 5. CUDA
-                            send(GuiUpdate::Status("Launching CUDA kernel...".to_string()));
-                            let dev = match cudarc::driver::CudaDevice::new(0) {
-                                Ok(d) => std::sync::Arc::new(d),
-                                Err(e) => {
-                                    send(GuiUpdate::Error(format!("CUDA error: {}", e)));
+                            // 1. Handshake
+                            send(GuiUpdate::Status("Requesting Public Key...".to_string()));
+                            if let Err(e) = socket.send_to(b"PK_REQ", &target_addr).await {
+                                send(GuiUpdate::Error(format!("Send PK_REQ failed: {}", e))); 
+                                return;
+                            }
+                            let mut pk_buf = [0u8; KYBER_PUBLICKEYBYTES];
+                             match tokio::time::timeout(Duration::from_secs(5), socket.recv_from(&mut pk_buf)).await {
+                                Ok(Ok((n, _))) if n == KYBER_PUBLICKEYBYTES => {},
+                                _ => {
+                                    send(GuiUpdate::Error("Handshake Timed Out".to_string()));
                                     return;
                                 }
                             };
-                            let weights_arr = [weights.w0, weights.w1, weights.w2];
-                            let salt = 42u64;
-                            let (frag24, frag5g1, frag5g2) = match crate::shredder::apply_ai_strategy(&dev, &encrypted, weights_arr, salt).await {
+                            
+                            send(GuiUpdate::Status("Encapsulating Secret...".to_string()));
+                            let mut rng = rand::thread_rng();
+                            let (_ct, shared_secret) = match encapsulate(&pk_buf, &mut rng) {
                                 Ok(res) => res,
-                                Err(e) => {
-                                    send(GuiUpdate::Error(format!("Shredder error: {}", e)));
+                                Err(_) => {
+                                    send(GuiUpdate::Error("Encapsulation failed".to_string()));
                                     return;
                                 }
                             };
+                            let quantum_salt = u64::from_be_bytes(shared_secret[0..8].try_into().unwrap());
 
-                            // 6. UDP Stream
-                            send(GuiUpdate::Status("Streaming fragments...".to_string()));
-                            send(GuiUpdate::Progress { current: 0, total: 3 });
-                            let frags = [&frag24, &frag5g1, &frag5g2];
-                            for (i, frag) in frags.iter().enumerate() {
-                                let addr = format!("{}:{}", target_ip, ports[i]);
-                                match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
-                                    Ok(socket) => {
-                                        let _ = socket.send_to(frag, &addr).await;
-                                        send(GuiUpdate::Progress { current: i + 1, total: 3 });
-                                    }
-                                    Err(e) => {
-                                        send(GuiUpdate::Error(format!("UDP error: {}", e)));
-                                        return;
+                            // 2. Metadata
+                            send(GuiUpdate::Status("Synchronizing Metadata...".to_string()));
+                            let mut meta = vec![b'M'];
+                            let fname = file_path.as_ref().unwrap().file_name().unwrap().to_str().unwrap();
+                            meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
+                            meta.extend_from_slice(fname.as_bytes());
+                            meta.extend_from_slice(&(total_len as u64).to_be_bytes());
+
+                            let mut meta_confirmed = false;
+                            for _ in 0..10 { // Try 10 times
+                                let _ = socket.send_to(&meta, &target_addr).await;
+                                let mut ack_buf = [0u8; 64];
+                                if let Ok(Ok((n, _))) = tokio::time::timeout(Duration::from_millis(500), socket.recv_from(&mut ack_buf)).await {
+                                    let msg = String::from_utf8_lossy(&ack_buf[..n]);
+                                    if msg.starts_with("META_ACK") {
+                                        meta_confirmed = true;
+                                        break;
                                     }
                                 }
                             }
-                            send(GuiUpdate::Status("Quantum Blast complete!".to_string()));
+                            if !meta_confirmed {
+                                send(GuiUpdate::Error("Metadata Handshake Failed".to_string()));
+                                return;
+                            }
+
+                            // 3. Stream
+                            send(GuiUpdate::Status("Streaming Payload...".to_string()));
+                            let w0 = 33; let w1 = 33; let w2 = 34; // Static weights for now
+
+                            for block_idx in 0..total_blocks {
+                                let start = block_idx * block_size;
+                                let end = (start + block_size).min(total_len);
+                                let block_data = &payload[start..end];
+
+                                let mut header = [0u8; 28];
+                                header[0..8].copy_from_slice(&quantum_salt.to_be_bytes());
+                                header[8..12].copy_from_slice(&(block_idx as u32).to_be_bytes());
+                                header[12..16].copy_from_slice(&(block_data.len() as u32).to_be_bytes());
+                                header[16..20].copy_from_slice(&(w0 as u32).to_be_bytes());
+                                header[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
+                                header[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
+
+                                // Send Header
+                                let _ = socket.send_to(&header, &target_addr).await;
+                                tokio::task::yield_now().await;
+
+                                // Send Chunks
+                                let chunk_size = 1024;
+                                for chunk in block_data.chunks(chunk_size) {
+                                    let _ = socket.send_to(chunk, &target_addr).await;
+                                    tokio::time::sleep(Duration::from_micros(500)).await;
+                                }
+
+                                send(GuiUpdate::Progress { current: block_idx + 1, total: total_blocks });
+                            }
+
+                            send(GuiUpdate::Status("Mission Success!".to_string()));
                             send(GuiUpdate::Finished);
                         });
                     });

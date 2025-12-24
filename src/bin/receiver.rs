@@ -102,17 +102,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // 4. Level 11 Metadata Handshake
-        let total_size = loop {
+        let (total_size, filename) = loop {
             let mut buf = [0u8; 512];
             let (n, addr) = sock_24.recv_from(&mut buf).await?;
             if n > 0 && buf[0] == b'M' {
                 let fname_len = u32::from_be_bytes(buf[1..5].try_into().unwrap()) as usize;
-                let fname = String::from_utf8_lossy(&buf[5..5 + fname_len]);
+                let fname = String::from_utf8_lossy(&buf[5..5 + fname_len]).to_string();
                 let incoming_size = u64::from_be_bytes(buf[5 + fname_len..5 + fname_len + 8].try_into().unwrap()) as usize;
                 println!("📦 METADATA: Filename: {}, Size: {} bytes", fname, incoming_size);
                 
                 let _ = sock_24.send_to(b"META_ACK", addr).await;
-                break incoming_size;
+                break (incoming_size, fname);
             } else if n == 6 && &buf[..6] == b"PK_REQ" {
                 let _ = sock_24.send_to(&public_key, addr).await;
             }
@@ -144,14 +144,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 data_buf[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
                 received += to_copy;
                 
-                if received % 10240 == 0 || received == total_size {
-                    println!("🚀 Progress: {}/{} bytes", received, total_size);
+                if received % (1024 * 1024 * 10) == 0 || received == total_size { // Log every 10MB
+                    println!("🚀 Progress: {}/{} bytes ({:.1}%)", received, total_size, (received as f64 / total_size as f64) * 100.0);
                 }
             }
         }
 
         // 6. Finalize Payload
-        std::fs::write("output.jpg", &data_buf)?;
-        println!("⚡ MISSION SUCCESS: Reassembled payload saved to output.jpg");
+        let output_filename = format!("reborn_{}", filename);
+        std::fs::write(&output_filename, &data_buf)?;
+        println!("⚡ MISSION SUCCESS: Reassembled payload saved to {}", output_filename);
     }
 }

@@ -93,13 +93,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
     let socket = Arc::new(UdpSocket::from_std(sock.into())?);
 
-    let file_path = "input.jpg";
-    let file_bytes = fs::read(file_path)?;
+    let file_path = "payload.bin";
+    let file_bytes = fs::read(file_path).expect("Failed to read payload.bin. Run 'fsutil file createnew payload.bin 104857600' first.");
     let total_len = file_bytes.len();
     let total_blocks = (total_len + block_size - 1) / block_size;
 
     println!("📦 STREAMING: {} bytes in {} blocks (BlockSize: {}MB)", total_len, total_blocks, block_size / 1024 / 1024);
-    println!("👉 Run: receiver.exe {}", total_len);
+    println!("👉 Run: receiver.exe (auto-detects size via metadata)");
     println!("⚠️ PRESS ENTER TO INITIATE QUANTUM HANDSHAKE...");
     let mut _line = String::new();
     let _ = std::io::stdin().read_line(&mut _line);
@@ -119,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Level 11 METADATA: Robust Handshake
     println!("📦 LATTICE: Synchronizing Metadata with Ghost Receiver...");
     let mut meta = vec![b'M'];
-    let fname = "input.jpg"; // Default for shred.rs
+    let fname = "payload.bin";
     meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
     meta.extend_from_slice(fname.as_bytes());
     meta.extend_from_slice(&(total_len as u64).to_be_bytes());
