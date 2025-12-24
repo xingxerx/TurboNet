@@ -1,4 +1,4 @@
-use pqc_kyber::{encapsulate, decapsulate, keypair, PublicKey, SecretKey};
+use pqc_kyber::encapsulate;
 use aes_gcm::{Aes256Gcm, Key, Nonce, aead::{Aead, KeyInit}};
 use rand::rngs::OsRng;
 
