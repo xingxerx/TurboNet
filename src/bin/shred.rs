@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use pqc_kyber::*;
 use std::convert::TryInto;
 use turbonet::deepseek_weights::DeepSeekWeights;
+use turbonet::ai_weights::HeuristicPredictor;
 
 #[derive(Serialize)]
 struct OllamaRequest {
@@ -167,30 +168,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        let neural_mode = std::env::var("TURBONET_NEURAL").unwrap_or_else(|_| "false".to_string()) == "true";
-        if neural_mode {
+        // SOTA: Use local predictor for microsecond-scale decisions
+        let use_deepseek_api = std::env::var("TURBONET_DEEPSEEK_API").unwrap_or_else(|_| "false".to_string()) == "true";
+        
+        if use_deepseek_api {
+            // Legacy: Use DeepSeek API (60s latency)
             let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "deepseek-r1:8b".to_string());
-            println!("🧠 NEURAL STRATEGIST: Consulting {} for strategic distribution...", model);
+            println!("🧠 LEGACY MODE: Consulting {} API (slow)...", model);
             if let Some(ai_weights) = get_ai_strategy(rtts).await {
-                println!("🤖 AI RECOMMENDATION: {:?}", ai_weights);
+                println!("🤖 API RECOMMENDATION: {:?}", ai_weights);
                 (ai_weights.w0 as i32, ai_weights.w1 as i32, ai_weights.w2 as i32)
             } else {
-                println!("⚠️ NEURAL TIMEOUT: Falling back to mathematical Auto-Pilot.");
-                let scores: Vec<f64> = rtts.iter().map(|r| 1.0 / r.max(0.001)).collect();
-                let sum: f64 = scores.iter().sum();
-                let nw0 = ((scores[0] / sum) * 100.0) as i32;
-                let nw1 = ((scores[1] / sum) * 100.0) as i32;
-                let nw2 = 100 - nw0 - nw1;
-                (nw0, nw1, nw2)
+                println!("⚠️ API TIMEOUT: Falling back to local predictor.");
+                let mut predictor = HeuristicPredictor::new();
+                let weights = predictor.predict(rtts, [0.0, 0.0, 0.0]);
+                (weights.w0 as i32, weights.w1 as i32, weights.w2 as i32)
             }
         } else {
-            let scores: Vec<f64> = rtts.iter().map(|r| 1.0 / r.max(0.001)).collect();
-            let sum: f64 = scores.iter().sum();
-            let nw0 = ((scores[0] / sum) * 100.0) as i32;
-            let nw1 = ((scores[1] / sum) * 100.0) as i32;
-            let nw2 = 100 - nw0 - nw1; 
-            println!("🧠 AUTO-PILOT: Mathematical balance: {}/{}/{}", nw0, nw1, nw2);
-            (nw0, nw1, nw2)
+            // SOTA: Local heuristic predictor (~50µs latency)
+            let start = std::time::Instant::now();
+            let mut predictor = HeuristicPredictor::new();
+            let weights = predictor.predict(rtts, [0.0, 0.0, 0.0]);
+            let latency = start.elapsed();
+            println!("⚡ LOCAL PREDICTOR: {}/{}/{} (latency: {:?})", weights.w0, weights.w1, weights.w2, latency);
+            (weights.w0 as i32, weights.w1 as i32, weights.w2 as i32)
         }
     } else {
         println!("⚡ SHREDDER CORE: Using static weights {}/{}/{}", w0_env, w1_env, w2_env);
