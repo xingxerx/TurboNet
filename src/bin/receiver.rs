@@ -133,6 +133,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         let mut received = 0;
         let mut last_log = 0;
+        let mut packets_received: u64 = 0;
+        let transfer_start = std::time::Instant::now();
         println!("🚀 BLAST START: Expecting {} bytes (Zero-Copy Mode)...", total_size);
 
         while received < total_size {
@@ -155,22 +157,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let to_copy = std::cmp::min(dn, total_size - received);
                 mmap[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
                 received += to_copy;
+                packets_received += 1;
                 
                 if received >= last_log + (1024 * 1024 * 10) || received == total_size { 
                     last_log = received;
-                    println!("🚀 Progress: {}/{} bytes ({:.1}%)", received, total_size, (received as f64 / total_size as f64) * 100.0);
+                    let elapsed = transfer_start.elapsed().as_secs_f64();
+                    let speed_mbps = if elapsed > 0.0 { (received as f64 / 1_000_000.0) / elapsed } else { 0.0 };
+                    println!("🚀 Progress: {}/{} bytes ({:.1}%) @ {:.1} MB/s", 
+                        received, total_size, (received as f64 / total_size as f64) * 100.0, speed_mbps);
                 }
             }
         }
 
+        // SOTA Metrics: Calculate final throughput
+        let transfer_duration = transfer_start.elapsed();
+        let duration_secs = transfer_duration.as_secs_f64();
+        let throughput_mbps = (received as f64 / 1_000_000.0) / duration_secs;
+        let throughput_gbps = throughput_mbps * 8.0 / 1000.0;
+
         // 6. Finalize Payload with Integrity Check
+        let hash_start = std::time::Instant::now();
         mmap.flush()?;
         
         // Level 11: SHA-256 Integrity Verification
         let mut hasher = Sha256::new();
         hasher.update(&mmap[..]);
         let hash = hasher.finalize();
+        let hash_duration = hash_start.elapsed();
+        
         println!("🛡️ INTEGRITY: SHA-256 Hash: {:x}", hash);
+        println!("📊 TRANSFER STATS:");
+        println!("   Duration: {:.2}s", duration_secs);
+        println!("   Bytes Received: {} ({:.2} MB)", received, received as f64 / 1_000_000.0);
+        println!("   Packets: {}", packets_received);
+        println!("   🚀 THROUGHPUT: {:.1} MB/s ({:.2} Gbps)", throughput_mbps, throughput_gbps);
+        println!("   🔐 Hash Time: {:?} ({:.1} MB/s)", hash_duration, 
+            (received as f64 / 1_000_000.0) / hash_duration.as_secs_f64());
         println!("⚡ MISSION SUCCESS: Reassembled payload saved to {}", output_filename);
     }
 }

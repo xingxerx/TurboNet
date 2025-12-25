@@ -96,8 +96,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
     let socket = Arc::new(UdpSocket::from_std(sock.into())?);
 
-    let file_path = "payload.bin";
-    let file_bytes = fs::read(file_path).expect("Failed to read payload.bin. Run 'fsutil file createnew payload.bin 104857600' first.");
+    let file_path = std::env::var("TURBONET_FILE").unwrap_or_else(|_| "payload.bin".to_string());
+    let file_bytes = fs::read(&file_path).unwrap_or_else(|_| panic!("Failed to read '{}'. Set TURBONET_FILE=yourfile.ext", file_path));
     let total_len = file_bytes.len();
     let total_blocks = (total_len + block_size - 1) / block_size;
 
@@ -122,7 +122,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Level 11 METADATA: Robust Handshake
     println!("📦 LATTICE: Synchronizing Metadata with Ghost Receiver...");
     let mut meta = vec![b'M'];
-    let fname = "payload.bin";
+    // Extract just the filename from the path
+    let fname = std::path::Path::new(&file_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(&file_path);
     meta.extend_from_slice(&(fname.len() as u32).to_be_bytes());
     meta.extend_from_slice(fname.as_bytes());
     meta.extend_from_slice(&(total_len as u64).to_be_bytes());
@@ -198,6 +202,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (w0_env, w1_env, w2_env)
     };
 
+    // SOTA Metrics: Track throughput and packet statistics
+    let transfer_start = std::time::Instant::now();
+    let mut total_packets_sent: u64 = 0;
+    let mut total_bytes_sent: u64 = 0;
+
     for block_idx in 0..total_blocks {
         let start = block_idx * block_size;
         let end = (start + block_size).min(total_len);
@@ -216,17 +225,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Send header
         socket.send_to(&header, format!("{}:{}", target_ip, p1_port)).await?;
+        total_packets_sent += 1;
+        total_bytes_sent += 28;
         tokio::task::yield_now().await;
         
         // Level 11: Optimized Stream (60KB chunks, 10µs delay - proven 100% reliable)
         let chunk_size = 60000;
         for chunk in block_data.chunks(chunk_size) {
             socket.send_to(chunk, format!("{}:{}", target_ip, p1_port)).await?;
+            total_packets_sent += 1;
+            total_bytes_sent += chunk.len() as u64;
             tokio::time::sleep(std::time::Duration::from_micros(10)).await;
         }
     }
 
+    // SOTA Metrics: Calculate and display throughput
+    let transfer_duration = transfer_start.elapsed();
+    let duration_secs = transfer_duration.as_secs_f64();
+    let throughput_mbps = (total_bytes_sent as f64 / 1_000_000.0) / duration_secs;
+    let throughput_gbps = throughput_mbps * 8.0 / 1000.0;
+    
     println!("⚡ MISSION SUCCESS: Continuous stream complete!");
+    println!("📊 TRANSFER STATS:");
+    println!("   Duration: {:.2}s", duration_secs);
+    println!("   Bytes Sent: {} ({:.2} MB)", total_bytes_sent, total_bytes_sent as f64 / 1_000_000.0);
+    println!("   Packets: {}", total_packets_sent);
+    println!("   🚀 THROUGHPUT: {:.1} MB/s ({:.2} Gbps)", throughput_mbps, throughput_gbps);
+    println!("   📊 LANE STATS: [0: 100%] [1: 0%] [2: 0%] (single-lane mode)");
     println!("Press Enter to exit...");
     let mut pause = String::new();
     std::io::stdin().read_line(&mut pause).unwrap();
