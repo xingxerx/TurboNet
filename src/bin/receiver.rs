@@ -1,6 +1,8 @@
 use dotenvy::dotenv;
 use std::env;
+use std::fs::OpenOptions;
 use sha2::{Sha256, Digest};
+use memmap2::MmapMut;
 pub struct GhostReassembler {
     pub total_size: usize,
     pub weights: [u64; 3],
@@ -119,11 +121,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        // 5. Receive Fragments with Header Stripping
-        let mut data_buf = vec![0u8; total_size];
+        // 5. Receive Fragments with Zero-Copy Mmap Reassembly
+        let output_filename = format!("reborn_{}", filename);
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&output_filename)?;
+        file.set_len(total_size as u64)?;
+        let mut mmap = unsafe { MmapMut::map_mut(&file)? };
+        
         let mut received = 0;
         let mut last_log = 0;
-        println!("🚀 BLAST START: Expecting {} bytes...", total_size);
+        println!("🚀 BLAST START: Expecting {} bytes (Zero-Copy Mode)...", total_size);
 
         while received < total_size {
             let mut packet = [0u8; 65536];
@@ -140,10 +150,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
 
-            // Accept raw data packets
+            // Accept raw data packets - write directly to mmap (zero-copy)
             if dn > 0 {
                 let to_copy = std::cmp::min(dn, total_size - received);
-                data_buf[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
+                mmap[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
                 received += to_copy;
                 
                 if received >= last_log + (1024 * 1024 * 10) || received == total_size { 
@@ -154,12 +164,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // 6. Finalize Payload with Integrity Check
-        let output_filename = format!("reborn_{}", filename);
-        std::fs::write(&output_filename, &data_buf)?;
+        mmap.flush()?;
         
         // Level 11: SHA-256 Integrity Verification
         let mut hasher = Sha256::new();
-        hasher.update(&data_buf);
+        hasher.update(&mmap[..]);
         let hash = hasher.finalize();
         println!("🛡️ INTEGRITY: SHA-256 Hash: {:x}", hash);
         println!("⚡ MISSION SUCCESS: Reassembled payload saved to {}", output_filename);

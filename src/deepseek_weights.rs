@@ -22,8 +22,14 @@ impl DeepSeekWeights {
     }
 
     pub fn validate(&self) -> Result<(), &'static str> {
-        if (self.w0 + self.w1 + self.w2) != 100 {
-            return Err("Strategic weights must sum to exactly 100.");
+        let total = self.w0 + self.w1 + self.w2;
+        if total != 100 {
+            return Err("Weights must sum to 100");
+        }
+        // Level 11 Requirement: Enforce minimum 5% fragmentation per lane 
+        // to maintain quantum-safe physical scattering.
+        if self.w0 < 5 || self.w1 < 5 || self.w2 < 5 {
+            return Err("Tactical Error: AI attempted to bypass multi-lane mesh.");
         }
         Ok(())
     }

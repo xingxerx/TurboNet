@@ -3992,6 +3992,7 @@ dependencies = [
  "indicatif",
  "local-ip-address",
  "local_ipaddress",
+ "memmap2",
  "network-interface",
  "pqc_kyber",
  "rand",

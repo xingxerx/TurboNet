@@ -10,7 +10,7 @@ fn main() {
 
     // Skip CUDA build if shredder.ptx already exists (pre-compiled)
     if std::path::Path::new("shredder.ptx").exists() {
-        println!("cargo:warning=Using existing shredder.ptx (skip CUDA compilation)");
+        // Informational message only, not a warning
         return;
     }
 
