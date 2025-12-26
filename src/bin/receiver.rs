@@ -137,6 +137,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let transfer_start = std::time::Instant::now();
         println!("🚀 BLAST START: Expecting {} bytes (Zero-Copy Mode)...", total_size);
 
+        let mut end_sender_addr: Option<std::net::SocketAddr> = None;
+        
         while received < total_size {
             let mut packet = [0u8; 65536];
             let (dn, addr) = sock_24.recv_from(&mut packet).await?;
@@ -144,6 +146,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Handle probe packets (16 bytes starting with 0xFFFFFFFFFFFFFFFF)
             if dn == 16 && packet[0..8] == 0xFFFFFFFFFFFFFFFFu64.to_be_bytes() {
                 let _ = sock_24.send_to(&packet[..dn], addr).await;
+                continue;
+            }
+
+            // Handle END_TRANSFER packet (graceful shutdown signal)
+            if dn == 12 && &packet[..12] == b"END_TRANSFER" {
+                end_sender_addr = Some(addr);
+                // Don't ACK yet - wait until we've received all data
                 continue;
             }
 
@@ -165,6 +174,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let speed_mbps = if elapsed > 0.0 { (received as f64 / 1_000_000.0) / elapsed } else { 0.0 };
                     println!("🚀 Progress: {}/{} bytes ({:.1}%) @ {:.1} MB/s", 
                         received, total_size, (received as f64 / total_size as f64) * 100.0, speed_mbps);
+                }
+            }
+        }
+        
+        // Send END_ACK to sender to confirm all data received
+        if let Some(sender_addr) = end_sender_addr {
+            for _ in 0..3 {
+                let _ = sock_24.send_to(b"END_ACK", sender_addr).await;
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        } else {
+            // Wait briefly for END_TRANSFER if we haven't received it yet
+            let wait_end = std::time::Instant::now();
+            while wait_end.elapsed().as_secs() < 2 {
+                let mut packet = [0u8; 64];
+                match tokio::time::timeout(std::time::Duration::from_millis(200), sock_24.recv_from(&mut packet)).await {
+                    Ok(Ok((dn, addr))) if dn == 12 && &packet[..12] == b"END_TRANSFER" => {
+                        for _ in 0..3 {
+                            let _ = sock_24.send_to(b"END_ACK", addr).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        }
+                        break;
+                    }
+                    _ => {}
                 }
             }
         }

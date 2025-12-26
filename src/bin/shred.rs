@@ -229,14 +229,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         total_bytes_sent += 28;
         tokio::task::yield_now().await;
         
-        // Level 11: Optimized Stream (60KB chunks, 10µs delay - proven 100% reliable)
-        let chunk_size = 60000;
+        // Level 11: Adaptive throughput modes
+        let turbo_mode = std::env::var("TURBONET_TURBO").unwrap_or_else(|_| "false".to_string()) == "true";
+        let adaptive_mode = std::env::var("TURBONET_ADAPTIVE").unwrap_or_else(|_| "true".to_string()) == "true";
+        
+        // Near-MTU chunks for efficiency (1400 bytes per packet)
+        let chunk_size: usize = std::env::var("TURBONET_CHUNK_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(if turbo_mode { 60000 } else { 1400 });
+        
+        let mut chunk_count = 0u32;
         for chunk in block_data.chunks(chunk_size) {
             socket.send_to(chunk, format!("{}:{}", target_ip, p1_port)).await?;
             total_packets_sent += 1;
             total_bytes_sent += chunk.len() as u64;
-            tokio::time::sleep(std::time::Duration::from_micros(10)).await;
+            chunk_count += 1;
+            
+            if turbo_mode {
+                // TURBO: No delay, maximum blast
+            } else if adaptive_mode {
+                // ADAPTIVE: Yield every 32 packets to saturate hardware without lockup
+                if chunk_count % 32 == 0 {
+                    tokio::task::yield_now().await;
+                }
+            } else {
+                // SAFE: Fixed delay for guaranteed delivery
+                tokio::time::sleep(std::time::Duration::from_micros(10)).await;
+            }
         }
+    }
+
+    // Graceful Shutdown: Send END packet and wait for receiver acknowledgment
+    println!("📡 SENDING END SIGNAL: Waiting for receiver to confirm...");
+    let end_packet = b"END_TRANSFER";
+    let mut end_confirmed = false;
+    let end_timeout = std::time::Instant::now();
+    
+    while !end_confirmed && end_timeout.elapsed().as_secs() < 10 {
+        socket.send_to(end_packet, format!("{}:{}", target_ip, p1_port)).await?;
+        let mut ack_buf = [0u8; 64];
+        match tokio::time::timeout(std::time::Duration::from_millis(500), socket.recv_from(&mut ack_buf)).await {
+            Ok(Ok((n, _))) => {
+                let msg = String::from_utf8_lossy(&ack_buf[..n]);
+                if msg.starts_with("END_ACK") {
+                    end_confirmed = true;
+                    println!("✅ RECEIVER CONFIRMED: All data received successfully!");
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    if !end_confirmed {
+        println!("⚠️ WARNING: No confirmation from receiver (timeout). Data may still be in transit.");
     }
 
     // SOTA Metrics: Calculate and display throughput

@@ -1,4 +1,4 @@
-# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v4.1)
+# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v4.0)
 
 **TurboNet** is a state-of-the-art software suite designed for ultra-secure, AI-optimized data fragmentation. It bridges **GPU-accelerated shredding** with **Post-Quantum Cryptography** and an **AI Reasoning Engine** to create an un-interceptable data stream across multiple physical network bands.
 
@@ -22,11 +22,8 @@ TurboNet uses **Module-Lattice (ML-KEM)** math to perform a quantum-safe handsha
 ### 🧠 Level 8: The Neural Strategist
 Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4GHz band gets congested while the 5GHz bands are clear, the AI automatically re-calculates the GPU shredding weights (w0, w1, w2) to shift traffic to the fastest path.
 
-### 📦 Level 11: Payload Awareness (Metadata Handshake)
-Both the CLI and GUI now synchronize file metadata (filename, size) with the receiver before transmission. The receiver automatically adapts to the incoming stream and saves the file as `reborn_<filename>`.
-
 ### 🖥️ Level 10: Mission Control Dashboard
-A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click. **Now fully synchronized with the v4.1 Metadata Protocol.**
+A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click.
 
 ---
 
@@ -42,36 +39,67 @@ A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT
 
 
 ### 2. Launch the Ghost Receiver
-The receiver must be running first. It waits for a handshake from either the CLI Shredder or Mission Control.
-```bashclea
-cargo run --release --bin receiver
+The receiver must be running first to generate the lattice keypair and listen for fragments.
+```bash
+# You must provide the expected total size in bytes (logged by the sender)
+./target/release/receiver.exe <TOTAL_BYTES>
 ```
-*Note: The receiver will print its listening IP. Use this IP in your .env or Mission Control.*
 
 
-### 3. Option A: Run the CLI Shredder (Stress Test)
-To stress test the system with a large payload:
-1. Generate a 100MB dummy file:
-   ```powershell
-   fsutil file createnew payload.bin 104857600
-   ```
-2. Run the shredder:
-   ```bash
-   cargo run --release --bin shred
-   ```
-   *Press ENTER when prompted to initiate the Quantum Handshake.*
-
-
-### 3. Option B: Launch Mission Control (GUI)
-Open the visual dashboard. **Run this from Windows PowerShell or Command Prompt.**
+### 3. Launch Mission Control (The Controller)
+Open the GUI dashboard to manage the mission. **Run this from Windows PowerShell or Command Prompt, not WSL.**
 ```powershell
 cd D:\TurboNet
-cargo run --release --bin mission_control
+cargo clean
+cargo build --release --bin mission_control
+$env:OLLAMA_MODEL="deepseek-r1:8b"
+./target/release/mission_control.exe
 ```
-1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
-2.  **Telemetry**: Observe the **Neural Radar** (gauges).
-3.  **Blast**: Click "🚀 INITIATE QUANTUM BLAST".
 
+---
+
+### ⚠️ WSL2/X11 Troubleshooting (Advanced)
+If you must run the GUI from WSL2, set your DISPLAY to the Windows host bridge IP:
+
+```bash
+grep nameserver /etc/resolv.conf | awk '{print $2}'
+export DISPLAY=YOUR_NAMESERVER_IP:0.0
+export LIBGL_ALWAYS_SOFTWARE=1
+cargo run --release --bin mission_control --
+```
+> **Note:** WSL2 will not provide full GPU or network performance. CUDA and 2.5Gbps Ethernet are only available natively on Windows.
+
+---
+
+## 📝 All Command-Line Invocations
+
+You can run the main binaries using Cargo as follows:
+
+```bash
+# Run the Ghost Receiver (replace <TOTAL_BYTES> with your value)
+cargo run --release --bin receiver -- <TOTAL_BYTES>
+
+# Run Mission Control (GUI Controller)
+cargo run --release --bin mission_control --
+
+# Run the Legacy Command-Line Shredder
+cargo run --release --bin shred --
+```
+
+Or run the built executables directly:
+
+```bash
+./target/release/receiver.exe <TOTAL_BYTES>
+./target/release/mission_control.exe
+./target/release/shred.exe
+```
+
+1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
+2.  **Telemetry**: Observe the **Neural Radar** (gauges) as they probe your 2.4GHz/5GHz lanes.
+3.  **Blast**: Click "🚀 INITIATE QUANTUM BLAST".
+    -   Handshake: Derives session entropy via Kyber shards.
+    -   AI Strategy: DeepSeek-R1 decides the lane distribution.
+    -   Streaming: CUDA shards and encrypts data in real-time.
 
 ---
 
@@ -90,22 +118,35 @@ When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three 
 ## 📂 Project Structure
 
 ### Binaries
-- `src/bin/mission_control.rs`: The v4.1 GUI Controller (Updated Protocol).
-- `src/bin/receiver.rs`: The Ghost Receiver (Auto-sizing, Metadata aware).
-- `src/bin/shred.rs`: CLI Shredder (Defaults to `payload.bin`).
+- `src/bin/mission_control.rs`: The v4.0 GUI Controller (AI, dashboard, async UDP).
+- `src/bin/receiver.rs`: The Ghost Receiver (reassembles fragments, quantum handshake).
+- `src/bin/shred.rs`: Legacy Command-Line Shredder (manual blast).
+- `src/bin/Memory-Safe_Listener.rs`: UDP echo node for connection verification.
+- `src/bin/broadcaster.rs`: Multi-band broadcaster (demo, placeholder).
 - `src/bin/check_lanes.rs`: Lane detection utility (Ethernet/Starlink).
 - `src/bin/flood.rs`: UDP flood speed test.
 - `src/bin/scan.rs`: Hardware lane scanner.
+- `src/bin/tokio.rs`: Tokio async demo.
 
 ### Core Source Files
-- `src/lib.rs`: Links modules.
-- `src/shredder.rs`: Orchestrates GPU kernel.
+- `src/lib.rs`: Links modules (deepseek_weights, network, shredder).
+- `src/deepseek_weights.rs`: DeepSeek AI weights logic and validation.
+- `src/network.rs`: Lane probing, hardware binding, network interface logic.
+- `src/shredder.rs`: Orchestrates GPU kernel, applies AI weights.
 - `src/crypto.rs`: Quantum session handshake (Kyber, AES-GCM).
-- `src/gui.rs`: Mission Control implementation.
 
 ### CUDA & PTX
 - `shredder.cu`: CUDA kernel for asymmetric shredding.
-- `shredder.ptx`: Pre-compiled PTX (allows running without nvcc).
+- `shredder.ptx`: Compiled PTX for GPU execution.
+- `build.rs`: Auto-compiles CUDA kernel to PTX.
+
+### Other
+- `Cargo.toml`: Rust dependencies and features.
+- `README.md`: This documentation.
+
+---
+**Available binaries:**
+Memory-Safe_Listener, broadcaster, check_lanes, flood, mission_control, receiver, scan, shred, tokio
 
 ---
 **The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆
