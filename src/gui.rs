@@ -10,8 +10,9 @@ use std::net::SocketAddr;
 
 enum GuiUpdate {
     Status(String),
-    // Rtts([f64; 3]), // Unused in bypass mode
-    // Weights((u64, u64, u64)), // Unused in bypass mode
+    Rtts([f64; 3]),
+    Weights((u64, u64, u64)),
+    Throughput(f64), // MB/s
     Progress { current: usize, total: usize },
     Error(String),
     Finished,
@@ -29,6 +30,11 @@ pub struct MissionControlGui {
     ai_weights: Option<(u64, u64, u64)>,
     blast_error: Option<String>,
     update_rx: Option<std::sync::mpsc::Receiver<GuiUpdate>>,
+    // v5.0 Settings
+    chunk_size: usize,
+    turbo_mode: bool,
+    multilane_mode: bool,
+    throughput: f64,
 }
 
 impl Clone for MissionControlGui {
@@ -44,6 +50,10 @@ impl Clone for MissionControlGui {
             ai_weights: self.ai_weights.clone(),
             blast_error: self.blast_error.clone(),
             update_rx: None, // Receiver cannot be cloned
+            chunk_size: self.chunk_size,
+            turbo_mode: self.turbo_mode,
+            multilane_mode: self.multilane_mode,
+            throughput: self.throughput,
         }
     }
 }
@@ -61,6 +71,11 @@ impl Default for MissionControlGui {
             ai_weights: None,
             blast_error: None,
             update_rx: None,
+            // v5.0 Settings
+            chunk_size: 1400,
+            turbo_mode: false,
+            multilane_mode: true,
+            throughput: 0.0,
         }
     }
 }
@@ -73,8 +88,9 @@ impl eframe::App for MissionControlGui {
             while let Ok(update) = rx.try_recv() {
                 match update {
                     GuiUpdate::Status(s) => self.ai_status = s,
-                    // GuiUpdate::Rtts(r) => self.lane_rtts = r,
-                    // GuiUpdate::Weights(w) => self.ai_weights = Some(w),
+                    GuiUpdate::Rtts(r) => self.lane_rtts = r,
+                    GuiUpdate::Weights(w) => self.ai_weights = Some(w),
+                    GuiUpdate::Throughput(t) => self.throughput = t,
                     GuiUpdate::Progress { current, total } => {
                         self.current_block = current;
                         self.total_blocks = total;
@@ -147,6 +163,26 @@ impl eframe::App for MissionControlGui {
                 }
             });
             ui.add_space(20.0);
+            
+            // v5.0 SETTINGS PANEL
+            ui.group(|ui| {
+                ui.set_width(ui.available_width());
+                ui.label(egui::RichText::new("⚙️ TRANSFER SETTINGS").strong());
+                ui.horizontal(|ui| {
+                    ui.label("Chunk Size:");
+                    ui.add(egui::Slider::new(&mut self.chunk_size, 512..=60000).suffix(" bytes"));
+                });
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.turbo_mode, "🚀 Turbo Mode (no delay)");
+                    ui.checkbox(&mut self.multilane_mode, "📡 Multi-Lane (3 sockets)");
+                });
+                if self.throughput > 0.0 {
+                    ui.label(egui::RichText::new(format!("⚡ Live: {:.1} MB/s", self.throughput))
+                        .color(egui::Color32::LIGHT_BLUE).strong());
+                }
+            });
+            ui.add_space(15.0);
+            
             ui.vertical_centered(|ui| {
                 ui.horizontal(|ui| {
                     ui.label("RECEIVER IP:");

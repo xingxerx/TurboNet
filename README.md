@@ -1,4 +1,4 @@
-# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v4.1)
+# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v5.0)
 
 **TurboNet** is a state-of-the-art software suite designed for ultra-secure, AI-optimized data fragmentation. It bridges **GPU-accelerated shredding** with **Post-Quantum Cryptography** and an **AI Reasoning Engine** to create an un-interceptable data stream across multiple physical network bands.
 
@@ -26,7 +26,17 @@ Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4G
 Both the CLI and GUI now synchronize file metadata (filename, size) with the receiver before transmission. The receiver automatically adapts to the incoming stream and saves the file as `reborn_<filename>`.
 
 ### 🖥️ Level 10: Mission Control Dashboard
-A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click. **Now fully synchronized with the v4.1 Metadata Protocol.**
+A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click. **Now fully synchronized with the v5.0 Metadata Protocol.**
+
+### 🔐 Level 12: Cryptographic Hardening (v5.0 NEW)
+- **Random Nonce Generation**: Each transfer uses a cryptographically secure 12-byte nonce (no more static nonces)
+- **XOR Obfuscation**: CUDA kernel now applies salt-based XOR scrambling in-kernel before distribution
+- **Decryption Support**: Full `decrypt_payload()` API for receiver-side decryption
+
+### 📡 Level 13: Multi-Lane Parallel Sending (v5.0 NEW)
+- **3-Socket Parallel UDP**: Sender creates 3 UDP sockets and distributes chunks based on AI weights
+- **Concurrent Reception**: Receiver uses `tokio::select!` to accept data from all 3 lanes simultaneously
+- **Per-Lane Statistics**: Real-time tracking of packets/bytes per lane
 
 ---
 

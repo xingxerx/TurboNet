@@ -134,18 +134,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut received = 0;
         let mut last_log = 0;
         let mut packets_received: u64 = 0;
+        let mut lane_packets: [u64; 3] = [0, 0, 0];
         let transfer_start = std::time::Instant::now();
-        println!("🚀 BLAST START: Expecting {} bytes (Zero-Copy Mode)...", total_size);
+        println!("🚀 BLAST START: Expecting {} bytes (Multi-Lane Zero-Copy Mode)...", total_size);
 
         let mut end_sender_addr: Option<std::net::SocketAddr> = None;
         
+        // Pre-allocate packet buffers for all lanes
+        let mut packet0 = [0u8; 65536];
+        let mut packet1 = [0u8; 65536];
+        let mut packet2 = [0u8; 65536];
+        
         while received < total_size {
-            let mut packet = [0u8; 65536];
-            let (dn, addr) = sock_24.recv_from(&mut packet).await?;
+            // LEVEL 13: Concurrent multi-lane reception using tokio::select!
+            let (dn, addr, lane_idx) = tokio::select! {
+                result = sock_24.recv_from(&mut packet0) => {
+                    let (n, a) = result?;
+                    (n, a, 0usize)
+                }
+                result = _sock_5g1.recv_from(&mut packet1) => {
+                    let (n, a) = result?;
+                    (n, a, 1usize)
+                }
+                result = _sock_5g2.recv_from(&mut packet2) => {
+                    let (n, a) = result?;
+                    (n, a, 2usize)
+                }
+            };
+            
+            let packet = match lane_idx {
+                0 => &packet0[..dn],
+                1 => &packet1[..dn],
+                _ => &packet2[..dn],
+            };
 
             // Handle probe packets (16 bytes starting with 0xFFFFFFFFFFFFFFFF)
             if dn == 16 && packet[0..8] == 0xFFFFFFFFFFFFFFFFu64.to_be_bytes() {
-                let _ = sock_24.send_to(&packet[..dn], addr).await;
+                let _ = sock_24.send_to(packet, addr).await;
                 continue;
             }
 
@@ -167,13 +192,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mmap[received..received + to_copy].copy_from_slice(&packet[..to_copy]);
                 received += to_copy;
                 packets_received += 1;
+                lane_packets[lane_idx] += 1;
                 
                 if received >= last_log + (1024 * 1024 * 10) || received == total_size { 
                     last_log = received;
                     let elapsed = transfer_start.elapsed().as_secs_f64();
                     let speed_mbps = if elapsed > 0.0 { (received as f64 / 1_000_000.0) / elapsed } else { 0.0 };
-                    println!("🚀 Progress: {}/{} bytes ({:.1}%) @ {:.1} MB/s", 
-                        received, total_size, (received as f64 / total_size as f64) * 100.0, speed_mbps);
+                    println!("🚀 Progress: {}/{} bytes ({:.1}%) @ {:.1} MB/s [L0:{} L1:{} L2:{}]", 
+                        received, total_size, (received as f64 / total_size as f64) * 100.0, speed_mbps,
+                        lane_packets[0], lane_packets[1], lane_packets[2]);
                 }
             }
         }

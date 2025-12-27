@@ -40,8 +40,13 @@ pub struct HeuristicPredictor {
 
 impl HeuristicPredictor {
     pub fn new() -> Self {
+        // Allow runtime configuration via env var
+        let alpha = std::env::var("AI_SMOOTHING_ALPHA")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0.3); // Default 30% weight to new observation
         Self {
-            alpha: 0.3, // 30% weight to new observation
+            alpha,
             prev_weights: None,
         }
     }

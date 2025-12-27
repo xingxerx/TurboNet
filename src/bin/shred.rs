@@ -88,13 +88,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dev = CudaDevice::new(0)?;
     dev.load_ptx(ptx, "shredder", &["shred_kernel"])?;
 
-    // Increase UDP socket buffer size to 4MB
-    let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
-    sock.set_reuse_address(true)?;
-    sock.set_recv_buffer_size(4 * 1024 * 1024)?;
-    sock.set_send_buffer_size(4 * 1024 * 1024)?;
-    sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
-    let socket = Arc::new(UdpSocket::from_std(sock.into())?);
+    // Create 3 sockets for multi-lane parallel sending
+    let create_socket = || -> Result<Arc<UdpSocket>, Box<dyn std::error::Error>> {
+        let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
+        sock.set_reuse_address(true)?;
+        sock.set_recv_buffer_size(4 * 1024 * 1024)?;
+        sock.set_send_buffer_size(4 * 1024 * 1024)?;
+        sock.bind(&"0.0.0.0:0".parse::<SocketAddr>()?.into())?;
+        Ok(Arc::new(UdpSocket::from_std(sock.into())?))
+    };
+    
+    let socket = create_socket()?;      // Primary (Lane 0)
+    let socket_l1 = create_socket()?;   // Lane 1
+    let socket_l2 = create_socket()?;   // Lane 2
+    
+    let multilane_mode = std::env::var("TURBONET_MULTILANE").unwrap_or_else(|_| "false".to_string()) == "true";
 
     let file_path = std::env::var("TURBONET_FILE").unwrap_or_else(|_| "payload.bin".to_string());
     let file_bytes = fs::read(&file_path).unwrap_or_else(|_| panic!("Failed to read '{}'. Set TURBONET_FILE=yourfile.ext", file_path));
@@ -206,13 +214,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transfer_start = std::time::Instant::now();
     let mut total_packets_sent: u64 = 0;
     let mut total_bytes_sent: u64 = 0;
+    let mut lane_bytes: [u64; 3] = [0, 0, 0];
+    let mut lane_packets: [u64; 3] = [0, 0, 0];
+    
+    // Precompute lane targets
+    let lane_addrs = [
+        format!("{}:{}", target_ip, p1_port),
+        format!("{}:{}", target_ip, _p2_port),
+        format!("{}:{}", target_ip, _p3_port),
+    ];
+    let sockets = [&socket, &socket_l1, &socket_l2];
 
     for block_idx in 0..total_blocks {
         let start = block_idx * block_size;
         let end = (start + block_size).min(total_len);
         let block_data = &file_bytes[start..end];
 
-        // BYPASS ENCRYPTION AND SHREDDING: Send raw data directly for testing
         println!("🌊 Streaming Block {}/{}...", block_idx + 1, total_blocks);
         
         let mut header = [0u8; 28];
@@ -223,10 +240,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         header[20..24].copy_from_slice(&(w1 as u32).to_be_bytes());
         header[24..28].copy_from_slice(&(w2 as u32).to_be_bytes());
         
-        // Send header
-        socket.send_to(&header, format!("{}:{}", target_ip, p1_port)).await?;
+        // Send header to primary lane
+        socket.send_to(&header, &lane_addrs[0]).await?;
         total_packets_sent += 1;
         total_bytes_sent += 28;
+        lane_packets[0] += 1;
+        lane_bytes[0] += 28;
         tokio::task::yield_now().await;
         
         // Level 11: Adaptive throughput modes
@@ -240,10 +259,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(if turbo_mode { 60000 } else { 1400 });
         
         let mut chunk_count = 0u32;
+        let total_weight = (w0 + w1 + w2) as u32;
+        
         for chunk in block_data.chunks(chunk_size) {
-            socket.send_to(chunk, format!("{}:{}", target_ip, p1_port)).await?;
+            // LEVEL 13: Multi-lane weight-based distribution
+            let lane_idx = if multilane_mode && total_weight > 0 {
+                let pos = chunk_count % total_weight;
+                if pos < w0 as u32 { 0 }
+                else if pos < (w0 + w1) as u32 { 1 }
+                else { 2 }
+            } else {
+                0 // Single-lane fallback
+            };
+            
+            sockets[lane_idx].send_to(chunk, &lane_addrs[lane_idx]).await?;
             total_packets_sent += 1;
             total_bytes_sent += chunk.len() as u64;
+            lane_packets[lane_idx] += 1;
+            lane_bytes[lane_idx] += chunk.len() as u64;
             chunk_count += 1;
             
             if turbo_mode {
@@ -297,7 +330,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Bytes Sent: {} ({:.2} MB)", total_bytes_sent, total_bytes_sent as f64 / 1_000_000.0);
     println!("   Packets: {}", total_packets_sent);
     println!("   🚀 THROUGHPUT: {:.1} MB/s ({:.2} Gbps)", throughput_mbps, throughput_gbps);
-    println!("   📊 LANE STATS: [0: 100%] [1: 0%] [2: 0%] (single-lane mode)");
+    
+    // Per-lane statistics
+    let total_b = lane_bytes[0] + lane_bytes[1] + lane_bytes[2];
+    if total_b > 0 {
+        let pct = |b: u64| (b as f64 / total_b as f64 * 100.0);
+        println!("   📡 LANE STATS: [0: {:.1}%] [1: {:.1}%] [2: {:.1}%] ({})", 
+            pct(lane_bytes[0]), pct(lane_bytes[1]), pct(lane_bytes[2]),
+            if multilane_mode { "multi-lane" } else { "single-lane" });
+    }
     println!("Press Enter to exit...");
     let mut pause = String::new();
     std::io::stdin().read_line(&mut pause).unwrap();
