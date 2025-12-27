@@ -138,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let transfer_start = std::time::Instant::now();
         println!("🚀 BLAST START: Expecting {} bytes (Multi-Lane Zero-Copy Mode)...", total_size);
 
+
         let mut end_sender_addr: Option<std::net::SocketAddr> = None;
         
         // Pre-allocate packet buffers for all lanes
@@ -145,28 +146,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut packet1 = [0u8; 65536];
         let mut packet2 = [0u8; 65536];
         
+        // Track last activity for inactivity timeout
+        let mut last_activity = std::time::Instant::now();
+        const INACTIVITY_TIMEOUT_SECS: u64 = 3;
+        
         while received < total_size {
-            // LEVEL 13: Concurrent multi-lane reception using tokio::select!
-            let (dn, addr, lane_idx) = tokio::select! {
+            // LEVEL 13: Concurrent multi-lane reception using tokio::select! with timeout
+            let recv_result = tokio::select! {
                 result = sock_24.recv_from(&mut packet0) => {
                     let (n, a) = result?;
-                    (n, a, 0usize)
+                    Some((n, a, 0usize, &packet0 as &[u8; 65536]))
                 }
                 result = _sock_5g1.recv_from(&mut packet1) => {
                     let (n, a) = result?;
-                    (n, a, 1usize)
+                    Some((n, a, 1usize, &packet1 as &[u8; 65536]))
                 }
                 result = _sock_5g2.recv_from(&mut packet2) => {
                     let (n, a) = result?;
-                    (n, a, 2usize)
+                    Some((n, a, 2usize, &packet2 as &[u8; 65536]))
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                    None // Timeout - check for inactivity
                 }
             };
             
-            let packet = match lane_idx {
-                0 => &packet0[..dn],
-                1 => &packet1[..dn],
-                _ => &packet2[..dn],
-            };
+            // Check for inactivity timeout (no new data for N seconds)
+            if recv_result.is_none() {
+                if last_activity.elapsed().as_secs() >= INACTIVITY_TIMEOUT_SECS {
+                    println!("⚠️ INACTIVITY TIMEOUT: No data received for {}s", INACTIVITY_TIMEOUT_SECS);
+                    println!("   Completing transfer with {} of {} bytes ({:.1}% received)", 
+                        received, total_size, (received as f64 / total_size as f64) * 100.0);
+                    break;
+                }
+                continue;
+            }
+            
+            let (dn, addr, lane_idx, packet_buf) = recv_result.unwrap();
+            let packet = &packet_buf[..dn];
+            last_activity = std::time::Instant::now();
 
             // Handle probe packets (16 bytes starting with 0xFFFFFFFFFFFFFFFF)
             if dn == 16 && packet[0..8] == 0xFFFFFFFFFFFFFFFFu64.to_be_bytes() {
@@ -177,7 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Handle END_TRANSFER packet (graceful shutdown signal)
             if dn == 12 && &packet[..12] == b"END_TRANSFER" {
                 end_sender_addr = Some(addr);
-                // Don't ACK yet - wait until we've received all data
+                // Continue receiving any remaining packets for a short while
                 continue;
             }
 

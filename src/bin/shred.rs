@@ -334,7 +334,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Per-lane statistics
     let total_b = lane_bytes[0] + lane_bytes[1] + lane_bytes[2];
     if total_b > 0 {
-        let pct = |b: u64| (b as f64 / total_b as f64 * 100.0);
+        let pct = |b: u64| b as f64 / total_b as f64 * 100.0;
         println!("   📡 LANE STATS: [0: {:.1}%] [1: {:.1}%] [2: {:.1}%] ({})", 
             pct(lane_bytes[0]), pct(lane_bytes[1]), pct(lane_bytes[2]),
             if multilane_mode { "multi-lane" } else { "single-lane" });

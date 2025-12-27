@@ -8,6 +8,7 @@ use std::convert::TryInto;
 use socket2::{Socket, Domain, Type};
 use std::net::SocketAddr;
 
+#[allow(dead_code)]
 enum GuiUpdate {
     Status(String),
     Rtts([f64; 3]),
