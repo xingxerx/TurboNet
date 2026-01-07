@@ -1,0 +1,5 @@
+# SPECTRE Quantum Engine Requirements
+# Part of TurboNet Quantum-Hardened Security Toolkit
+
+cirq>=1.0.0
+numpy>=1.20.0

@@ -50,3 +50,6 @@ criterion = { version = "0.5", features = ["async_tokio"], optional = true }
 name = "pps_benchmark"
 harness = false
 
+[[bin]]
+name = "spectre"
+path = "src/bin/spectre.rs"

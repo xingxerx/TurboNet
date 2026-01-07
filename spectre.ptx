@@ -1,0 +1,33 @@
+//
+// SPECTRE-GPU PTX Placeholder
+//
+// This file was generated as a placeholder. For full CUDA functionality,
+// compile with nvcc from an x64 Native Tools Command Prompt for VS:
+//
+//   nvcc -ptx spectre.cu -o spectre.ptx
+//
+// Without actual CUDA compilation, the spectre binary will fail at runtime
+// when attempting to load this PTX module.
+//
+// Note: TurboNet's existing shredder functionality will continue to work.
+//
+
+.version 7.0
+.target sm_30
+.address_size 64
+
+// Placeholder kernel - will cause runtime error if actually loaded
+.visible .entry spectre_mutate_kernel()
+{
+    ret;
+}
+
+.visible .entry spectre_find_best_kernel()
+{
+    ret;
+}
+
+.visible .entry spectre_decode_kernel()
+{
+    ret;
+}
