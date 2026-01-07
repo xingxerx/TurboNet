@@ -4578,6 +4578,7 @@ dependencies = [
  "socket2 0.6.1",
  "tokio",
  "wifi_scan",
+ "windows 0.52.0",
  "winwifi",
  "zeroize",
 ]

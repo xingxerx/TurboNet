@@ -53,6 +53,14 @@ harness = false
 
 [target.'cfg(windows)'.dependencies]
 winwifi = "0.1"                  # Windows-specific Wi-Fi connection management
+windows = { version = "0.52", features = [
+    "Win32_Foundation",
+    "Win32_System_Memory",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Diagnostics_Debug",
+] }
 
 [[bin]]
 name = "spectre"
@@ -61,3 +69,7 @@ path = "src/bin/spectre.rs"
 [[bin]]
 name = "quantum_hound"
 path = "src/bin/quantum_hound.rs"
+
+[[bin]]
+name = "sentinel_memscan"
+path = "src/bin/sentinel_memscan.rs"

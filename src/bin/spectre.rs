@@ -2,8 +2,9 @@
 //!
 //! Part of TurboNet Quantum-Hardened Security Toolkit
 
-
 use std::process::{Command, Stdio};
+use std::io::{Write, stdin, stdout};
+use std::time::Duration;
 use turbonet::spectre::{MutationMode, SpectreEngine};
 
 #[tokio::main]
@@ -19,6 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "mutate" => run_mutate(&args[2..]).await?,
         "quantum" => run_quantum(&args[2..])?,
         "entropy" => run_entropy(&args[2..])?,
+        "scan" => run_wifi_scan().await?,
         "--help" | "-h" | "help" => print_usage(&args[0]),
         _ => {
             eprintln!("Unknown command: {}", args[1]);
@@ -48,6 +50,7 @@ fn print_usage(prog: &str) {
     println!("  mutate    Generate polymorphic payload variants on GPU");
     println!("  quantum   Run quantum threat analysis on crypto");
     println!("  entropy   Calculate entropy of a file");
+    println!("  scan      Interactive WiFi network scanner");
     println!();
     println!("MUTATE OPTIONS:");
     println!("  --input <FILE>      Input payload file");
@@ -64,7 +67,7 @@ fn print_usage(prog: &str) {
     println!("EXAMPLES:");
     println!("  {} mutate --input payload.bin --variants 10000 --mode cascade", prog);
     println!("  {} quantum --key-size 2048 --algorithm rsa", prog);
-    println!("  {} entropy --input payload.bin", prog);
+    println!("  {} scan", prog);
 }
 
 async fn run_mutate(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
@@ -342,3 +345,215 @@ fn run_entropy(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     
     Ok(())
 }
+
+/// Interactive WiFi scanner mode
+async fn run_wifi_scan() -> Result<(), Box<dyn std::error::Error>> {
+    println!("\n╔═══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║  SPECTRE WiFi Recon - Interactive Network Scanner                             ║");
+    println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+    println!("║  Commands: [R]efresh  [Q]uit  [1-9] Select network for quantum analysis       ║");
+    println!("╚═══════════════════════════════════════════════════════════════════════════════╝\n");
+    
+    loop {
+        // Scan for WiFi networks using netsh on Windows
+        let output = Command::new("netsh")
+            .args(&["wlan", "show", "networks", "mode=bssid"])
+            .output()?;
+        
+        if !output.status.success() {
+            eprintln!("[!] Failed to scan WiFi networks. Make sure WiFi is enabled.");
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            continue;
+        }
+        
+        let scan_output = String::from_utf8_lossy(&output.stdout);
+        let networks = parse_wifi_networks(&scan_output);
+        
+        // Clear screen (ANSI escape)
+        print!("\x1B[2J\x1B[1;1H");
+        
+        println!("╔═══════════════════════════════════════════════════════════════════════════════╗");
+        println!("║  SPECTRE WiFi Recon                                      {:>20} ║", 
+                 chrono_time());
+        println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+        println!("║  #   SSID                           BSSID              Signal  Auth          ║");
+        println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+        
+        for (i, net) in networks.iter().enumerate().take(15) {
+            let signal_bar = signal_to_bar(net.signal);
+            println!("║  {:>2}  {:<30} {:17}  {:6}  {:<14} ║", 
+                     i + 1,
+                     truncate(&net.ssid, 30),
+                     &net.bssid,
+                     signal_bar,
+                     truncate(&net.auth, 14));
+        }
+        
+        if networks.is_empty() {
+            println!("║       No networks found. Make sure WiFi is enabled.                          ║");
+        }
+        
+        println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+        println!("║  [R]efresh  [Q]uit  [1-9] Analyze network  (auto-refresh in 5s)               ║");
+        println!("╚═══════════════════════════════════════════════════════════════════════════════╝");
+        print!("\n> ");
+        stdout().flush()?;
+        
+        // Non-blocking input with timeout
+        let input = tokio::time::timeout(
+            Duration::from_secs(5),
+            tokio::task::spawn_blocking(|| {
+                let mut input = String::new();
+                stdin().read_line(&mut input).ok();
+                input.trim().to_lowercase()
+            })
+        ).await;
+        
+        match input {
+            Ok(Ok(cmd)) => {
+                if cmd == "q" || cmd == "quit" || cmd == "exit" {
+                    println!("[*] Exiting SPECTRE WiFi Recon...");
+                    break;
+                } else if cmd == "r" || cmd == "refresh" {
+                    continue;
+                } else if let Ok(num) = cmd.parse::<usize>() {
+                    if num > 0 && num <= networks.len() {
+                        let net = &networks[num - 1];
+                        analyze_network(net);
+                        println!("\nPress Enter to continue...");
+                        let _ = stdin().read_line(&mut String::new());
+                    }
+                }
+            }
+            _ => {} // Timeout - auto-refresh
+        }
+    }
+    
+    Ok(())
+}
+
+struct WifiNetwork {
+    ssid: String,
+    bssid: String,
+    signal: i32,
+    auth: String,
+}
+
+fn parse_wifi_networks(output: &str) -> Vec<WifiNetwork> {
+    let mut networks = Vec::new();
+    let mut current_ssid = String::new();
+    let mut current_bssid = String::new();
+    let mut current_signal = 0;
+    let mut current_auth = String::new();
+    
+    for line in output.lines() {
+        let line = line.trim();
+        
+        if line.starts_with("SSID") && !line.starts_with("BSSID") {
+            if let Some(ssid) = line.split(':').nth(1) {
+                current_ssid = ssid.trim().to_string();
+            }
+        } else if line.starts_with("BSSID") {
+            if let Some(bssid) = line.split(':').skip(1).collect::<Vec<_>>().join(":").trim().split_whitespace().next() {
+                // If we have a previous network, save it
+                if !current_bssid.is_empty() {
+                    networks.push(WifiNetwork {
+                        ssid: current_ssid.clone(),
+                        bssid: current_bssid,
+                        signal: current_signal,
+                        auth: current_auth.clone(),
+                    });
+                }
+                current_bssid = bssid.to_string();
+            }
+        } else if line.starts_with("Signal") {
+            if let Some(signal) = line.split(':').nth(1) {
+                current_signal = signal.trim().replace('%', "").parse().unwrap_or(0);
+            }
+        } else if line.starts_with("Authentication") {
+            if let Some(auth) = line.split(':').nth(1) {
+                current_auth = auth.trim().to_string();
+            }
+        }
+    }
+    
+    // Don't forget the last network
+    if !current_bssid.is_empty() {
+        networks.push(WifiNetwork {
+            ssid: current_ssid,
+            bssid: current_bssid,
+            signal: current_signal,
+            auth: current_auth,
+        });
+    }
+    
+    // Sort by signal strength
+    networks.sort_by(|a, b| b.signal.cmp(&a.signal));
+    networks
+}
+
+fn signal_to_bar(signal: i32) -> String {
+    let bars = match signal {
+        0..=20 => "▂    ",
+        21..=40 => "▂▄   ",
+        41..=60 => "▂▄▆  ",
+        61..=80 => "▂▄▆█ ",
+        _ => "▂▄▆██",
+    };
+    format!("{}", bars)
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() > max {
+        format!("{}…", &s[..max-1])
+    } else {
+        format!("{:width$}", s, width = max)
+    }
+}
+
+fn chrono_time() -> String {
+    // Simple time without chrono dependency
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let hours = (secs / 3600) % 24;
+    let mins = (secs / 60) % 60;
+    let secs = secs % 60;
+    format!("{:02}:{:02}:{:02} UTC", hours, mins, secs)
+}
+
+fn analyze_network(net: &WifiNetwork) {
+    println!("\n╔═══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║  QUANTUM THREAT ANALYSIS: {}                              ", truncate(&net.ssid, 30));
+    println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+    println!("║  BSSID:     {}                                          ║", net.bssid);
+    println!("║  Signal:    {}%                                                            ║", net.signal);
+    println!("║  Auth:      {}                                          ║", truncate(&net.auth, 40));
+    println!("╠═══════════════════════════════════════════════════════════════════════════════╣");
+    
+    // Analyze auth method for quantum vulnerability
+    let auth_lower = net.auth.to_lowercase();
+    
+    if auth_lower.contains("wpa3") {
+        println!("║  [+] WPA3-SAE: Uses ECDH key exchange                                        ║");
+        println!("║  [!] QUANTUM STATUS: VULNERABLE to Shor's Algorithm                          ║");
+        println!("║  [*] RECOMMENDATION: Monitor for WPA4 with PQC support                       ║");
+    } else if auth_lower.contains("wpa2") {
+        println!("║  [~] WPA2-PSK: Uses 4-way handshake with PBKDF2                              ║");
+        println!("║  [!] QUANTUM STATUS: Password derivation weakened by Grover's               ║");
+        println!("║  [*] RECOMMENDATION: Use 20+ character passphrase                            ║");
+    } else if auth_lower.contains("wep") {
+        println!("║  [-] WEP: CRITICALLY INSECURE (broken classically!)                          ║");
+        println!("║  [!] QUANTUM STATUS: Already trivially broken                                ║");
+        println!("║  [*] RECOMMENDATION: UPGRADE IMMEDIATELY                                     ║");
+    } else if auth_lower.contains("open") {
+        println!("║  [-] OPEN: No encryption!                                                    ║");
+        println!("║  [!] QUANTUM STATUS: N/A - No cryptography to break                          ║");
+        println!("║  [*] RECOMMENDATION: Avoid or use VPN                                        ║");
+    } else {
+        println!("║  [?] Unknown auth: {}                                   ║", truncate(&net.auth, 30));
+        println!("║  [*] RECOMMENDATION: Investigate auth method                                 ║");
+    }
+    
+    println!("╚═══════════════════════════════════════════════════════════════════════════════╝");
+}
+
