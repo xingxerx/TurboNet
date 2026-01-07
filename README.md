@@ -1,121 +1,197 @@
-# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v5.0)
+# 🛰️ TurboNet: The Quantum-Red Ecosystem
 
-**TurboNet** is a state-of-the-art software suite designed for ultra-secure, AI-optimized data fragmentation. It bridges **GPU-accelerated shredding** with **Post-Quantum Cryptography** and an **AI Reasoning Engine** to create an un-interceptable data stream across multiple physical network bands.
+> **The First GPU-Accelerated, Quantum-Ready Penetration Testing Framework.**
 
----
-
-## 🛠️ The Tech Stack
-
--   **Frontend**: `egui` + `eframe` (High-performance 60FPS Immediate Mode GUI).
--   **Security**: `pqc_kyber` (Kyber-768/ML-KEM) + `aes-gcm` (AES-256).
--   **Intelligence**: `DeepSeek-R1:8b` (Local LLM via Ollama).
--   **Performance**: `CUDA 13.0` (Hardware-parallel shredding).
--   **Network**: `Tokio` (Async UDP multi-band blasting).
+<p align="center">
+  <img src="https://img.shields.io/badge/Core-Rust-orange?style=for-the-badge&logo=rust" alt="Rust"/>
+  <img src="https://img.shields.io/badge/Compute-CUDA-76B900?style=for-the-badge&logo=nvidia" alt="CUDA"/>
+  <img src="https://img.shields.io/badge/Analysis-Cirq-4285F4?style=for-the-badge&logo=google" alt="Cirq"/>
+  <img src="https://img.shields.io/badge/Intelligence-Python_AI-3776AB?style=for-the-badge&logo=python" alt="Python"/>
+</p>
 
 ---
 
-## 🚀 Key Features
+## ⚠️ LEGAL DISCLAIMER
 
-### ⚛️ Level 9: The Lattice-Based Ghost
-TurboNet uses **Module-Lattice (ML-KEM)** math to perform a quantum-safe handshake. The session key is never shared over the wire; it is encapsulated and decrypted using Kyber-768, protecting your data against future quantum computers (**Harvest Now, Decrypt Later Resistance**).
+> [!CAUTION]
+> **This software is provided for EDUCATIONAL and AUTHORIZED SECURITY TESTING purposes ONLY.**
+>
+> - You MUST have explicit written permission before testing any systems you do not own.
+> - Unauthorized access to computer systems is illegal under laws including the Computer Fraud and Abuse Act (CFAA), Computer Misuse Act, and similar legislation worldwide.
+> - The authors assume NO liability for misuse of this software.
+> - By using this software, you agree to use it responsibly and legally.
 
-### 🧠 Level 8: The Neural Strategist
-Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4GHz band gets congested while the 5GHz bands are clear, the AI automatically re-calculates the GPU shredding weights (w0, w1, w2) to shift traffic to the fastest path.
+---
 
-### 📦 Level 11: Payload Awareness (Metadata Handshake)
-Both the CLI and GUI now synchronize file metadata (filename, size) with the receiver before transmission. The receiver automatically adapts to the incoming stream and saves the file as `reborn_<filename>`.
+## 🎯 Project Overview
 
-### 🖥️ Level 10: Mission Control Dashboard
-A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click. **Now fully synchronized with the v5.0 Metadata Protocol.**
+**TurboNet** is a state-of-the-art security research platform that bridges **GPU-accelerated payload generation** with **Post-Quantum Cryptography** and **Quantum Threat Simulation**. Built for researchers who need to understand tomorrow's threats today.
 
-### 🔐 Level 12: Cryptographic Hardening (v5.0 NEW)
-- **Random Nonce Generation**: Each transfer uses a cryptographically secure 12-byte nonce (no more static nonces)
-- **XOR Obfuscation**: CUDA kernel now applies salt-based XOR scrambling in-kernel before distribution
-- **Decryption Support**: Full `decrypt_payload()` API for receiver-side decryption
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Core** | Rust | Zero-cost abstractions, memory safety |
+| **Compute** | CUDA 13.0 | Parallel polymorphic mutation |
+| **Analysis** | Cirq (Python) | Quantum threat simulation |
+| **Intelligence** | DeepSeek-R1 | Heuristic prediction & AI reasoning |
+| **Security** | Kyber-768 + AES-256 | Post-quantum cryptographic handshake |
 
-### 📡 Level 13: Multi-Lane Parallel Sending (v5.0 NEW)
-- **3-Socket Parallel UDP**: Sender creates 3 UDP sockets and distributes chunks based on AI weights
-- **Concurrent Reception**: Receiver uses `tokio::select!` to accept data from all 3 lanes simultaneously
+---
+
+## 🚀 The Quantum-Red Ecosystem
+
+### 1. 📡 TurboNet Core (The Foundation)
+**Tech:** Rust + CUDA + Tokio  
+**Function:** Ultra-secure, AI-optimized data transmission across multiple physical network bands.  
+**Status:** ✅ Production Ready
+
+### 2. ⚔️ SPECTRE-GPU (The Weapon)
+**Tech:** Rust + CUDA + TurboNet  
+**Function:** GPU-accelerated polymorphic payload generation at 10Gbps with evasion-optimized mutations.  
+**Status:** ✅ Integration Complete
+
+### 3. �️ Sentinel-Rust (The Shield)
+**Tech:** Pure Rust  
+**Function:** Entropy analysis engine to detect and quarantine polymorphic payloads.  
+**Status:** 🔧 Counter-measure Ready
+
+### 4. 🔬 Quantum-PT (The Analyst)
+**Tech:** Rust + Cirq (Python)  
+**Function:** Simulates Shor's and Grover's algorithms to analyze cryptographic vulnerabilities.  
+**Status:** ✅ Blueprints Ready
+
+### 5. 📶 Quantum-Hound (The Recon)
+**Tech:** Rust + wifi-rs + Python AI  
+**Function:** Automated Wi-Fi auditing with AI-powered credential prediction.  
+**Status:** 🔧 Recon Logic Ready
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend**: `egui` + `eframe` (High-performance 60FPS Immediate Mode GUI)
+- **Security**: `pqc_kyber` (Kyber-768/ML-KEM) + `aes-gcm` (AES-256)
+- **Intelligence**: `DeepSeek-R1:8b` (Local LLM via Ollama)
+- **Performance**: `CUDA 13.0` (Hardware-parallel shredding)
+- **Network**: `Tokio` (Async UDP multi-band blasting)
+- **Quantum**: `Cirq` (Python quantum circuit simulation)
+
+---
+
+## ⚡ Key Features
+
+### ⚛️ Post-Quantum Cryptography
+TurboNet uses **Module-Lattice (ML-KEM)** to perform quantum-safe handshakes. Session keys are encapsulated using Kyber-768, protecting against **Harvest Now, Decrypt Later** attacks.
+
+### 🧠 Neural AI Strategist
+Integrated **DeepSeek-R1** monitors network lanes in real-time. When the 2.4GHz band gets congested, the AI re-calculates GPU shredding weights to shift traffic to the fastest path.
+
+### 🎭 SPECTRE Polymorphic Engine
+CUDA-accelerated mutation engine generates unique payloads on every execution:
+- **Instruction substitution** (semantic equivalents)
+- **Register rotation** (dynamic allocation)
+- **Control flow obfuscation** (opaque predicates)
+- **Dead code injection** (noise generation)
+
+### � Quantum Threat Simulation
+Integrated Cirq engine simulates:
+- **Shor's Algorithm**: RSA/ECC key factorization threats
+- **Grover's Algorithm**: Symmetric key search acceleration (AES-128 → effective 64-bit)
+
+### 📡 Multi-Lane Parallel Transmission
+- **3-Socket Parallel UDP**: Distributes chunks across 3 network lanes
+- **Concurrent Reception**: `tokio::select!` accepts data from all lanes simultaneously
 - **Per-Lane Statistics**: Real-time tracking of packets/bytes per lane
 
 ---
 
+## 🚦 Quick Start
 
-## 🚦 How to Run the Suite
+> **Important:** For full GPU and network performance, run TurboNet natively on Windows.
 
-> **Important:** For full GPU and network performance, always run TurboNet natively on Windows. WSL2 is not recommended for production use due to limited hardware passthrough and routing issues.
+### Prerequisites
+- **Hardware**: Windows PC with NVIDIA GPU (RTX recommended)
+- **Software**: Rust, CUDA Toolkit 13.0+, Python 3.11+, [Ollama](https://ollama.com/)
 
+### 1. Clone & Build
+```bash
+git clone https://github.com/your-username/TurboNet.git
+cd TurboNet
+cargo build --release
+```
 
-### 1. Prerequisites
--   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
--   **Software**: Rust (Cargo), CUDA Toolkit, and [Ollama](https://ollama.com/) (running `deepseek-r1:8b`).
-
-
-### 2. Launch the Ghost Receiver
-The receiver must be running first. It waits for a handshake from either the CLI Shredder or Mission Control.
-```bashclea
+### 2. Launch the Receiver
+```bash
 cargo run --release --bin receiver
 ```
-*Note: The receiver will print its listening IP. Use this IP in your .env or Mission Control.*
 
+### 3. Option A: CLI Shredder
+```bash
+# Generate test payload
+fsutil file createnew payload.bin 104857600
 
-### 3. Option A: Run the CLI Shredder (Stress Test)
-To stress test the system with a large payload:
-1. Generate a 100MB dummy file:
-   ```powershell
-   fsutil file createnew payload.bin 104857600
-   ```
-2. Run the shredder:
-   ```bash
-   cargo run --release --bin shred
-   ```
-   *Press ENTER when prompted to initiate the Quantum Handshake.*
+# Run shredder
+cargo run --release --bin shred
+```
 
-
-### 3. Option B: Launch Mission Control (GUI)
-Open the visual dashboard. **Run this from Windows PowerShell or Command Prompt.**
+### 3. Option B: Mission Control (GUI)
 ```powershell
-cd D:\TurboNet
 cargo run --release --bin mission_control
 ```
-1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
-2.  **Telemetry**: Observe the **Neural Radar** (gauges).
-3.  **Blast**: Click "🚀 INITIATE QUANTUM BLAST".
 
+### 4. SPECTRE Payload Generator
+```bash
+cargo run --release --bin spectre
+```
+
+### 5. Quantum Threat Analysis
+```bash
+cd py_src
+pip install -r requirements.txt
+python quantum_engine.py
+```
 
 ---
-
-## ⚡ Hardware/Environment Warning
-
-> **For best results:**
-> - Run all TurboNet binaries from Windows, not WSL.
-> - Ensure NVIDIA drivers and CUDA Toolkit are installed on Windows.
-> - Your 2.5Gbps Ethernet and GPU will only be fully utilized when running natively.
-
----
-
-## 🛡️ Security Protocol (Quantum Mesh)
-When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three network ports (`8001`, `8002`, `8003`). An attacker would need to intercept **all three physical bands simultaneously** AND possess a **4000+ qubit Quantum Computer** to compromise the session.
 
 ## 📂 Project Structure
 
-### Binaries
-- `src/bin/mission_control.rs`: The v4.1 GUI Controller (Updated Protocol).
-- `src/bin/receiver.rs`: The Ghost Receiver (Auto-sizing, Metadata aware).
-- `src/bin/shred.rs`: CLI Shredder (Defaults to `payload.bin`).
-- `src/bin/check_lanes.rs`: Lane detection utility (Ethernet/Starlink).
-- `src/bin/flood.rs`: UDP flood speed test.
-- `src/bin/scan.rs`: Hardware lane scanner.
-
-### Core Source Files
-- `src/lib.rs`: Links modules.
-- `src/shredder.rs`: Orchestrates GPU kernel.
-- `src/crypto.rs`: Quantum session handshake (Kyber, AES-GCM).
-- `src/gui.rs`: Mission Control implementation.
-
-### CUDA & PTX
-- `shredder.cu`: CUDA kernel for asymmetric shredding.
-- `shredder.ptx`: Pre-compiled PTX (allows running without nvcc).
+```
+TurboNet/
+├── src/
+│   ├── bin/
+│   │   ├── mission_control.rs   # GUI Dashboard
+│   │   ├── receiver.rs          # Ghost Receiver
+│   │   ├── shred.rs             # CLI Shredder
+│   │   └── spectre.rs           # SPECTRE Payload Generator
+│   ├── lib.rs                   # Module exports
+│   ├── shredder.rs              # GPU kernel orchestrator
+│   ├── crypto.rs                # Kyber + AES-GCM
+│   ├── spectre.rs               # Polymorphic engine
+│   └── gui.rs                   # Mission Control UI
+├── py_src/
+│   ├── quantum_engine.py        # Cirq threat simulation
+│   └── requirements.txt         # Python dependencies
+├── shredder.cu                  # CUDA shredding kernel
+├── spectre.cu                   # CUDA polymorphic kernel
+├── *.ptx                        # Pre-compiled PTX kernels
+└── README.md
+```
 
 ---
-**The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆
+
+## 🛡️ Security Protocol
+
+When you "Blast," the Kyber ciphertext is shredded across three network ports (`8001`, `8002`, `8003`). An attacker would need to intercept **all three physical bands simultaneously** AND possess a **4000+ qubit quantum computer** to compromise the session.
+
+---
+
+## � License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**Remember:** With great power comes great responsibility. Use this framework ethically and legally.
+
+---
+
+<p align="center">
+  <b>The Ghost is in the Lattice.</b> 🫡⚛️🧠🏁🏆
+</p>

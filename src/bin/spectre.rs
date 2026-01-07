@@ -2,7 +2,7 @@
 //!
 //! Part of TurboNet Quantum-Hardened Security Toolkit
 
-use std::io::{Read, Write};
+
 use std::process::{Command, Stdio};
 use turbonet::spectre::{MutationMode, SpectreEngine};
 
@@ -252,7 +252,7 @@ report = {{
 print(json.dumps(report, indent=2))
 "#, key_size, algorithm);
 
-    let mut child = Command::new("python")
+    let child = Command::new("python")
         .args(&["-c", &script])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -278,7 +278,7 @@ fn run_classical_quantum_analysis(key_size: u32, algorithm: &str) {
     
     let (attack, effective_bits, status) = match algorithm.to_lowercase().as_str() {
         "aes" | "symmetric" => {
-            let effective = (key_size as f64).sqrt().log2() as u32;
+            let _effective = (key_size as f64).sqrt().log2() as u32;
             let effective_bits = key_size / 2;  // Grover's halves the key space
             let status = if effective_bits < 80 {
                 "CRITICAL"
