@@ -60,6 +60,8 @@ windows = { version = "0.52", features = [
     "Win32_System_Threading",
     "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_SystemInformation",
+    "Win32_Security",
 ] }
 
 [[bin]]
@@ -73,3 +75,31 @@ path = "src/bin/quantum_hound.rs"
 [[bin]]
 name = "sentinel_memscan"
 path = "src/bin/sentinel_memscan.rs"
+
+[[bin]]
+name = "pe_parser"
+path = "src/bin/pe_parser.rs"
+
+[[bin]]
+name = "strings_extract"
+path = "src/bin/strings_extract.rs"
+
+[[bin]]
+name = "hook_detector"
+path = "src/bin/hook_detector.rs"
+
+[[bin]]
+name = "token_steal"
+path = "src/bin/token_steal.rs"
+
+[[bin]]
+name = "proc_hollow"
+path = "src/bin/proc_hollow.rs"
+
+[[bin]]
+name = "net_sniffer"
+path = "src/bin/net_sniffer.rs"
+
+[[bin]]
+name = "beacon_gen"
+path = "src/bin/beacon_gen.rs"
