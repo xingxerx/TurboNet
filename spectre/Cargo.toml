@@ -1,0 +1,19 @@
+[package]
+name = "spectre"
+version.workspace = true
+edition.workspace = true
+description = "GPU-accelerated polymorphic payload generator"
+
+[dependencies]
+tokio.workspace = true
+rand.workspace = true
+cudarc.workspace = true
+
+# Use actual crate name with underscore
+[dependencies.turbonet_core]
+package = "turbonet-core"
+path = "../turbonet-core"
+
+[[bin]]
+name = "spectre"
+path = "src/main.rs"

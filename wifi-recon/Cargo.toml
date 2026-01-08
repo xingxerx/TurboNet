@@ -1,0 +1,23 @@
+[package]
+name = "wifi-recon"
+version.workspace = true
+edition.workspace = true
+description = "WiFi auditing and reconnaissance tools"
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+wifi_scan.workspace = true
+network-interface.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winwifi = "0.1"
+
+[[bin]]
+name = "quantum-hound"
+path = "src/quantum_hound.rs"
+
+[[bin]]
+name = "wifi-scan"
+path = "src/scan.rs"

@@ -1,0 +1,27 @@
+[package]
+name = "sentinel"
+version.workspace = true
+edition.workspace = true
+description = "Memory forensics and process analysis tools"
+
+[dependencies]
+tokio.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
+
+[[bin]]
+name = "sentinel-memscan"
+path = "src/memscan.rs"
+
+[[bin]]
+name = "hook-detector"
+path = "src/hook_detector.rs"
+
+[[bin]]
+name = "token-steal"
+path = "src/token_steal.rs"
+
+[[bin]]
+name = "proc-hollow"
+path = "src/proc_hollow.rs"

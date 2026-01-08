@@ -1,0 +1,26 @@
+[package]
+name = "tools"
+version.workspace = true
+edition.workspace = true
+description = "Security analysis utilities"
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "pe-parser"
+path = "src/pe_parser.rs"
+
+[[bin]]
+name = "strings-extract"
+path = "src/strings_extract.rs"
+
+[[bin]]
+name = "net-sniffer"
+path = "src/net_sniffer.rs"
+
+[[bin]]
+name = "beacon-gen"
+path = "src/beacon_gen.rs"
