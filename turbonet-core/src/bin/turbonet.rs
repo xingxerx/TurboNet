@@ -73,10 +73,6 @@ enum Commands {
         #[arg(long, default_value = "ollama:gpt-oss:20b")]
         model: String,
 
-        /// Run in mock mode (no AI) for testing
-        #[arg(long)]
-        mock: bool,
-
         #[command(subcommand)]
         action: GuardAction,
     },
@@ -254,17 +250,12 @@ async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Er
         Commands::Info => {
             print_system_info();
         }
-        Commands::Guard { interface: _interface, model, mock, action, .. } => {
+        Commands::Guard { interface: _interface, model, action, .. } => {
             match action {
                 GuardAction::Start { port, .. } => {
                      println!("🛡️ Starting AI Traffic Guard...");
                      let port_str = port.to_string();
-                     let mut args = vec!["run", "-p", "tools", "--bin", "net-guard", "--", "--run", &port_str, &model];
-                     if mock {
-                         args.push("--mock");
-                         println!("⚠️  RUNNING IN MOCK MODE");
-                     }
-                     
+                     let args = vec!["run", "-p", "tools", "--bin", "net-guard", "--", "--run", &port_str, &model];
                      println!("   → Run: cargo {}", args.join(" "));
                     
                     // In a real CLI we might spawn this directly, but for now we print the command 

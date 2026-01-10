@@ -35,6 +35,9 @@ Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4G
 ### 🖥️ Level 10: Mission Control Dashboard
 A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click.
 
+### 🛡️ Level 11: The Cyber Sentinel (Traffic Guard)
+An active defense system utilizing **GPT-OSS** (open-weight AI models) to monitor network traffic in real-time. The "Cyber Security Analyst" agent analyzes packet payloads for malicious patterns (SQLi, beacons, port scans) and actively blocks hostile IPs using a user-space firewall.
+
 ---
 
 
@@ -94,6 +97,9 @@ cargo run --release --bin mission_control --
 
 # Run the Legacy Command-Line Shredder
 cargo run --release --bin shred --
+
+# Run the AI Traffic Guard (Active Defense)
+turbonet guard start --port 8888 --model ollama:gpt-oss
 ```
 
 Or run the built executables directly:
@@ -130,6 +136,7 @@ When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three 
 ### Binaries
 - `src/bin/mission_control.rs`: The v4.0 GUI Controller (AI, dashboard, async UDP).
 - `src/bin/receiver.rs`: The Ghost Receiver (reassembles fragments, quantum handshake).
+- `src/bin/turbonet.rs`: Unified CLI orchestrator for all security tools.
 - `src/bin/shred.rs`: Legacy Command-Line Shredder (manual blast).
 - `src/bin/Memory-Safe_Listener.rs`: UDP echo node for connection verification.
 - `src/bin/broadcaster.rs`: Multi-band broadcaster (demo, placeholder).
@@ -137,6 +144,7 @@ When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three 
 - `src/bin/flood.rs`: UDP flood speed test.
 - `src/bin/scan.rs`: Hardware lane scanner.
 - `src/bin/tokio.rs`: Tokio async demo.
+- `tools/src/net_guard.rs`: AI active defense and traffic blocking.
 
 ### Core Source Files
 - `src/lib.rs`: Links modules (deepseek_weights, network, shredder).
