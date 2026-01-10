@@ -97,12 +97,10 @@ mod detector {
                         buffer.as_mut_ptr() as *mut c_void,
                         buffer.len(),
                         Some(&mut bytes_read),
-                    ).is_ok() && bytes_read >= 8 {
-                        if is_hook_signature(&buffer) {
-                            hooks_found += 1;
-                            println!("[!] Potential hook at 0x{:016X}: {:02X?}", 
-                                     mbi.BaseAddress as usize, &buffer[..8]);
-                        }
+                    ).is_ok() && bytes_read >= 8 && is_hook_signature(&buffer) {
+                        hooks_found += 1;
+                        println!("[!] Potential hook at 0x{:016X}: {:02X?}", 
+                                    mbi.BaseAddress as usize, &buffer[..8]);
                     }
                 }
 

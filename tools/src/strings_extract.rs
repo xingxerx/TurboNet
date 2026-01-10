@@ -91,7 +91,7 @@ fn extract_strings(path: &str, min_len: usize, show_offset: bool) -> Result<(), 
     let mut start_offset = 0;
     
     for (i, &byte) in data.iter().enumerate() {
-        if byte >= 0x20 && byte < 0x7F {
+        if (0x20..0x7F).contains(&byte) {
             if current.is_empty() {
                 start_offset = i;
             }
@@ -107,7 +107,7 @@ fn extract_strings(path: &str, min_len: usize, show_offset: bool) -> Result<(), 
     
     // Extract wide (UTF-16 LE) strings
     for i in (0..data.len().saturating_sub(1)).step_by(2) {
-        if data[i + 1] == 0 && data[i] >= 0x20 && data[i] < 0x7F {
+        if data[i + 1] == 0 && (0x20..0x7F).contains(&data[i]) {
             if current.is_empty() {
                 start_offset = i;
             }

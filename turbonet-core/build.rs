@@ -54,7 +54,7 @@ See CUDA_BUILD_LINUX_MAC.md for details.\n");
     // Compile CUDA kernels to PTX using nvcc
     if !shredder_exists {
         let status = std::process::Command::new("nvcc")
-            .args(&["-ptx", "shredder.cu", "-o", "shredder.ptx"])
+            .args(["-ptx", "shredder.cu", "-o", "shredder.ptx"])
             .status()
             .expect("Failed to compile shredder.cu");
         if !status.success() {
@@ -64,7 +64,7 @@ See CUDA_BUILD_LINUX_MAC.md for details.\n");
     
     if !spectre_exists {
         let status = std::process::Command::new("nvcc")
-            .args(&["-ptx", "spectre.cu", "-o", "spectre.ptx"])
+            .args(["-ptx", "spectre.cu", "-o", "spectre.ptx"])
             .status()
             .expect("Failed to compile spectre.cu");
         if !status.success() {

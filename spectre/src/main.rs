@@ -173,7 +173,7 @@ fn run_quantum(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     
     // Check if Python/Cirq is available
     let python_check = Command::new("python")
-        .args(&["-c", "import cirq; print('OK')"])
+        .args(["-c", "import cirq; print('OK')"])
         .output();
     
     match python_check {
@@ -256,7 +256,7 @@ print(json.dumps(report, indent=2))
 "#, key_size, algorithm);
 
     let child = Command::new("python")
-        .args(&["-c", &script])
+        .args(["-c", &script])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -357,7 +357,7 @@ async fn run_wifi_scan() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // Scan for WiFi networks using netsh on Windows
         let output = Command::new("netsh")
-            .args(&["wlan", "show", "networks", "mode=bssid"])
+            .args(["wlan", "show", "networks", "mode=bssid"])
             .output()?;
         
         if !output.status.success() {
@@ -409,8 +409,7 @@ async fn run_wifi_scan() -> Result<(), Box<dyn std::error::Error>> {
             })
         ).await;
         
-        match input {
-            Ok(Ok(cmd)) => {
+        if let Ok(Ok(cmd)) = input {
                 if cmd == "q" || cmd == "quit" || cmd == "exit" {
                     println!("[*] Exiting SPECTRE WiFi Recon...");
                     break;
@@ -425,8 +424,7 @@ async fn run_wifi_scan() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            _ => {} // Timeout - auto-refresh
-        }
+        // Timeout - auto-refresh, just continue loop
     }
     
     Ok(())

@@ -9,6 +9,8 @@ use std::sync::Arc;
 use tokio::net::UdpSocket;
 use socket2::{Socket, Domain, Type};
 
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
 /// Trait for high-performance socket operations
 /// Implementations can be swapped between standard tokio, io_uring, or DPDK
 pub trait TurboSocket: Send + Sync {
@@ -17,19 +19,19 @@ pub trait TurboSocket: Send + Sync {
         &'a self,
         buf: &'a [u8],
         target: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<usize>> + Send + 'a>>;
+    ) -> BoxFuture<'a, usize>;
 
     /// Receive data and return source address
     fn recv_from<'a>(
         &'a self,
         buf: &'a mut [u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(usize, SocketAddr)>> + Send + 'a>>;
+    ) -> BoxFuture<'a, (usize, SocketAddr)>;
 
     /// Batch send multiple packets (for high-throughput scenarios)
     fn batch_send<'a>(
         &'a self,
         packets: &'a [(&'a [u8], SocketAddr)],
-    ) -> Pin<Box<dyn Future<Output = Result<usize>> + Send + 'a>>;
+    ) -> BoxFuture<'a, usize>;
 
     /// Get the local address this socket is bound to
     fn local_addr(&self) -> Result<SocketAddr>;
@@ -72,7 +74,7 @@ impl TurboSocket for TokioUdpBackend {
         &'a self,
         buf: &'a [u8],
         target: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<usize>> + Send + 'a>> {
+    ) -> BoxFuture<'a, usize> {
         Box::pin(async move {
             self.socket.send_to(buf, target).await
         })
@@ -81,7 +83,7 @@ impl TurboSocket for TokioUdpBackend {
     fn recv_from<'a>(
         &'a self,
         buf: &'a mut [u8],
-    ) -> Pin<Box<dyn Future<Output = Result<(usize, SocketAddr)>> + Send + 'a>> {
+    ) -> BoxFuture<'a, (usize, SocketAddr)> {
         Box::pin(async move {
             self.socket.recv_from(buf).await
         })
@@ -90,7 +92,7 @@ impl TurboSocket for TokioUdpBackend {
     fn batch_send<'a>(
         &'a self,
         packets: &'a [(&'a [u8], SocketAddr)],
-    ) -> Pin<Box<dyn Future<Output = Result<usize>> + Send + 'a>> {
+    ) -> BoxFuture<'a, usize> {
         Box::pin(async move {
             let mut total = 0;
             for (buf, addr) in packets {

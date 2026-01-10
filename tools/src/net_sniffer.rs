@@ -83,7 +83,7 @@ fn listen_udp(port: u16) {
                 let preview: String = buf[..std::cmp::min(size, 16)]
                     .iter()
                     .map(|&b| {
-                        if b >= 0x20 && b < 0x7F {
+                        if (0x20..0x7F).contains(&b) {
                             b as char
                         } else {
                             '.'

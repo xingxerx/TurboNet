@@ -498,7 +498,7 @@ fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dy
 
     // Add profile
     let add_result = Command::new("netsh")
-        .args(&["wlan", "add", "profile", &format!("filename={}", temp_path.display())])
+        .args(["wlan", "add", "profile", &format!("filename={}", temp_path.display())])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
@@ -510,7 +510,7 @@ fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dy
 
     // Attempt connection
     let _connect_result = Command::new("netsh")
-        .args(&["wlan", "connect", &format!("name={}", ssid)])
+        .args(["wlan", "connect", &format!("name={}", ssid)])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;
@@ -520,7 +520,7 @@ fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dy
 
     // Check if connected
     let status = Command::new("netsh")
-        .args(&["wlan", "show", "interfaces"])
+        .args(["wlan", "show", "interfaces"])
         .output()?;
 
     let status_output = String::from_utf8_lossy(&status.stdout);
@@ -530,7 +530,7 @@ fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dy
     // Cleanup: delete profile if not connected
     if !connected {
         let _ = Command::new("netsh")
-            .args(&["wlan", "delete", "profile", &format!("name={}", ssid)])
+            .args(["wlan", "delete", "profile", &format!("name={}", ssid)])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status();

@@ -43,12 +43,12 @@ impl Clone for MissionControlGui {
         Self {
             file_path: self.file_path.clone(),
             target_ip: self.target_ip.clone(),
-            lane_rtts: self.lane_rtts.clone(),
+            lane_rtts: self.lane_rtts,
             ai_status: self.ai_status.clone(),
             current_block: self.current_block,
             total_blocks: self.total_blocks,
             is_blasting: self.is_blasting,
-            ai_weights: self.ai_weights.clone(),
+            ai_weights: self.ai_weights,
             blast_error: self.blast_error.clone(),
             update_rx: None, // Receiver cannot be cloned
             chunk_size: self.chunk_size,
@@ -239,7 +239,7 @@ impl eframe::App for MissionControlGui {
                             };
                             let total_len = payload.len();
                             let block_size = 5242880; // 5MB
-                            let total_blocks = (total_len + block_size - 1) / block_size;
+                            let total_blocks = (total_len).div_ceil(block_size);
                             send(GuiUpdate::Progress { current: 0, total: total_blocks });
 
                             // 1. Handshake
