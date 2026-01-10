@@ -63,6 +63,24 @@ enum Commands {
         action: SentinelAction,
     },
 
+    /// Cyber Security Analyst - Active Traffic Guard
+    Guard {
+        /// Network interface to monitor (e.g., eth0, any)
+        #[arg(long, default_value = "any")]
+        interface: String,
+
+        /// AI model for real-time traffic analysis
+        #[arg(long, default_value = "ollama:gpt-oss:20b")]
+        model: String,
+
+        /// Run in mock mode (no AI) for testing
+        #[arg(long)]
+        mock: bool,
+
+        #[command(subcommand)]
+        action: GuardAction,
+    },
+
     /// List all available tools
     List,
 
@@ -104,6 +122,17 @@ enum SentinelAction {
     Hooks,
     /// Token enumeration
     Tokens,
+}
+
+#[derive(Subcommand)]
+enum GuardAction {
+    /// Start active defense
+    Start {
+        #[arg(long, default_value = "8888")]
+        port: u16,
+        #[arg(long, default_value = "ollama:gpt-oss")]
+        model: String,
+    }
 }
 
 #[tokio::main]
@@ -225,6 +254,34 @@ async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Er
         Commands::Info => {
             print_system_info();
         }
+        Commands::Guard { interface: _interface, model, mock, action, .. } => {
+            match action {
+                GuardAction::Start { port, .. } => {
+                     println!("🛡️ Starting AI Traffic Guard...");
+                     let port_str = port.to_string();
+                     let mut args = vec!["run", "-p", "tools", "--bin", "net-guard", "--", "--run", &port_str, &model];
+                     if mock {
+                         args.push("--mock");
+                         println!("⚠️  RUNNING IN MOCK MODE");
+                     }
+                     
+                     println!("   → Run: cargo {}", args.join(" "));
+                    
+                    // In a real CLI we might spawn this directly, but for now we print the command 
+                    // consistent with other tools in this CLIwrapper.
+                    // However, let's actually run it for the user if they want interactive mode.
+                    use std::process::Command;
+                    
+                    let status = Command::new("cargo")
+                        .args(&args)
+                        .status()?;
+                        
+                    if !status.success() {
+                        eprintln!("Guard process exited with error");
+                    }
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -246,8 +303,7 @@ async fn run_defense_advisor(
         let content = std::fs::read_to_string(&path)?;
         serde_json::from_str(&content)?
     } else {
-        eprintln!("❌ Error: Provide --input <file> or use --demo");
-        std::process::exit(1);
+        return Err("Provide --input <file> or use --demo".into());
     };
 
     // Parse model spec

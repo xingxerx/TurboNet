@@ -203,6 +203,94 @@ pub fn parse_model_spec(spec: &str) -> (String, String) {
     }
 }
 
+/// Network packet metadata for analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficPacket {
+    pub timestamp: u64,
+    pub src_ip: String,
+    pub dst_port: u16,
+    pub protocol: String,
+    pub payload_preview: String,
+    pub payload_size: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DecisionType {
+    Allow,
+    Block,
+    Monitor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficDecision {
+    pub ip: String,
+    pub decision: DecisionType,
+    pub confidence: u8,
+    pub reason: String,
+}
+
+impl DefenseAdvisor {
+    /// Analyze a batch of traffic packets and return access control decisions
+    pub async fn analyze_traffic_batch(&self, packets: &[TrafficPacket]) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+        if packets.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let prompt = self.build_traffic_prompt(packets);
+        let response = self.call_llm(&prompt).await?;
+        self.parse_traffic_response(&response)
+    }
+
+    fn build_traffic_prompt(&self, packets: &[TrafficPacket]) -> String {
+        let packets_json = serde_json::to_string_pretty(packets).unwrap_or_default();
+        
+        format!(r#"You are an automated network security analyst (Traffic Guard). Analyze this batch of network packets for malicious activity.
+
+## Traffic Batch
+```json
+{}
+```
+
+## Instructions
+1. Analyze the source IP behavior, ports, and payload contents.
+2. Look for: Port scanning, C2 beacons, SQL injection, buffer overflows, or unauthorized access attempts.
+3. Decide: ALLOW, BLOCK, or MONITOR (flag for review) for each unique Source IP.
+4. "payload_preview" is ASCII/Hex representation.
+
+## Required Response Format
+Return a JSON array of decisions. Do NOT explain outside JSON.
+```json
+[
+  {{
+    "ip": "1.2.3.4",
+    "decision": "BLOCK",
+    "confidence": 90,
+    "reason": "Repeated connection attempts to diverse ports (Scanning)"
+  }}
+]
+```"#, packets_json)
+    }
+
+    fn parse_traffic_response(&self, response: &str) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+        // Try to extract JSON from response
+        let json_start = response.find('[');
+        let json_end = response.rfind(']');
+        
+        if let (Some(start), Some(end)) = (json_start, json_end) {
+            let json_str = &response[start..=end];
+            if let Ok(decisions) = serde_json::from_str::<Vec<TrafficDecision>>(json_str) {
+                return Ok(decisions);
+            }
+        }
+
+        // Failure fallback - safe fail (allow all but log error)
+        // In a real system we might block-all on failure if paranoid
+        eprintln!("Failed to parse AI Traffic decision. Raw response: {}", response);
+        Ok(vec![])
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

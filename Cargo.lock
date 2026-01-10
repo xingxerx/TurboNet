@@ -4470,6 +4470,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "turbonet-core",
 ]
 
 [[package]]

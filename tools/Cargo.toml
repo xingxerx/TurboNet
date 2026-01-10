@@ -8,6 +8,8 @@ description = "Security analysis utilities"
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+turbonet-core = { path = "../turbonet-core" }
+
 
 [[bin]]
 name = "pe-parser"
@@ -21,6 +23,12 @@ path = "src/strings_extract.rs"
 name = "net-sniffer"
 path = "src/net_sniffer.rs"
 
+
 [[bin]]
 name = "beacon-gen"
 path = "src/beacon_gen.rs"
+
+[[bin]]
+name = "net-guard"
+path = "src/net_guard.rs"
+
