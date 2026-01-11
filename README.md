@@ -50,8 +50,15 @@ An active defense system utilizing **GPT-OSS** (open-weight AI models) to monito
 -   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
 -   **Software**: Rust (Cargo), CUDA Toolkit, and [Ollama](https://ollama.com/) (running `deepseek-r1:8b`).
 
+### 2. Install the TurboNet CLI (Recommended)
+To run the `turbonet` command globally:
+```bash
+cargo install --path turbonet-core
+```
+*This allows you to run `turbonet guard` from any terminal.*
 
-### 2. Launch the Ghost Receiver
+
+### 3. Launch the Ghost Receiver
 The receiver must be running first to generate the lattice keypair and listen for fragments.
 ```bash
 # You must provide the expected total size in bytes (logged by the sender)
@@ -59,7 +66,7 @@ The receiver must be running first to generate the lattice keypair and listen fo
 ```
 
 
-### 3. Launch Mission Control (The Controller)
+### 4. Launch Mission Control (The Controller)
 Open the GUI dashboard to manage the mission. **Run this from Windows PowerShell or Command Prompt, not WSL.**
 ```powershell
 cd D:\TurboNet
@@ -100,6 +107,9 @@ cargo run --release --bin shred --
 
 # Run the AI Traffic Guard (Active Defense)
 turbonet guard start --port 8888 --model ollama:gpt-oss
+
+# OR run from source:
+cargo run -p turbonet-core --bin turbonet -- guard start --port 8888 --model ollama:gpt-oss
 ```
 
 Or run the built executables directly:
