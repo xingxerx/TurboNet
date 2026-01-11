@@ -8,6 +8,10 @@ use std::convert::TryInto;
 use socket2::{Socket, Domain, Type};
 use std::net::SocketAddr;
 
+use turbonet_core::neural_link::{NeuralBus, ThreatLevel};
+use turbonet::deepseek_weights; 
+use std::time::SystemTime;
+
 #[allow(dead_code)]
 enum GuiUpdate {
     Status(String),
@@ -35,7 +39,9 @@ pub struct MissionControlGui {
     chunk_size: usize,
     turbo_mode: bool,
     multilane_mode: bool,
+    multilane_mode: bool,
     throughput: f64,
+    neural_state: NeuralState,
 }
 
 impl Clone for MissionControlGui {
@@ -55,6 +61,7 @@ impl Clone for MissionControlGui {
             turbo_mode: self.turbo_mode,
             multilane_mode: self.multilane_mode,
             throughput: self.throughput,
+            neural_state: self.neural_state.clone(),
         }
     }
 }
@@ -77,8 +84,27 @@ impl Default for MissionControlGui {
             turbo_mode: false,
             multilane_mode: true,
             throughput: 0.0,
+            neural_state: NeuralState::default(),
         }
     }
+}
+
+// Added for Neural Link
+#[derive(Debug, Clone)]
+struct NeuralState {
+    threat_level: ThreatLevel,
+    active_threats: usize,
+    last_advice: Option<String>,
+}
+
+impl Default for NeuralState {
+   fn default() -> Self {
+       Self {
+           threat_level: ThreatLevel::Safe,
+           active_threats: 0,
+           last_advice: None,
+       }
+   }
 }
 
 impl eframe::App for MissionControlGui {
@@ -108,12 +134,21 @@ impl eframe::App for MissionControlGui {
                 }
             }
         }
-        if finished {
-            self.update_rx = None;
-        }
+            if finished {
+                self.update_rx = None;
+            }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.set_min_height(80.0);
+            // Neural Link: Poll every frame (cached by OS/FS) or use a timer in a real app
+            // For this demo, we read every 60 frames approx (1 sec)
+            if ctx.input(|i| i.time % 2.0 < 0.05) {
+                 let bus = NeuralBus::read();
+                 self.neural_state.threat_level = bus.threat_level;
+                 self.neural_state.active_threats = bus.active_threats;
+                 self.neural_state.last_advice = bus.tactical_advice;
+            }
+
+            egui::CentralPanel::default().show(ctx, |ui| {
+                ui.set_min_height(80.0);
 
             // Hardware/Environment warning
             #[cfg(not(target_os = "windows"))]
@@ -161,6 +196,16 @@ impl eframe::App for MissionControlGui {
                 }
                 if let Some(err) = &self.blast_error {
                     ui.label(egui::RichText::new(format!("❌ ERROR: {}", err)).color(egui::Color32::RED));
+                }
+                
+                // Neural Link Display
+                if self.neural_state.active_threats > 0 {
+                    ui.add_space(5.0);
+                    ui.label(egui::RichText::new("⚠️ TACTICAL ALERT: ACTIVE THREATS DETECTED").color(egui::Color32::RED).strong());
+                    ui.label(format!("Threat Level: {:?} | Count: {}", self.neural_state.threat_level, self.neural_state.active_threats));
+                    if let Some(advice) = &self.neural_state.last_advice {
+                        ui.label(egui::RichText::new(format!("💡 ADVICE: {}", advice)).italics());
+                    }
                 }
             });
             ui.add_space(20.0);
@@ -295,9 +340,55 @@ impl eframe::App for MissionControlGui {
 
                             // 3. Stream
                             send(GuiUpdate::Status("Streaming Payload...".to_string()));
-                            let w0 = 33; let w1 = 33; let w2 = 34; // Static weights for now
+                            
+                            // Initialize Weight Strategy
+                            let mut w0 = 33u64;
+                            let mut w1 = 33u64;
+                            let mut w2 = 34u64;
+                            
+                            // Initialize AI Loop (Async Spawn or Inline Check)
+                            // Ideally, this runs in parallel. For simplicity in this demo,
+                            // we'll update it every N blocks to avoid blocking the stream too much,
+                            // OR spawn a separate task to update an Arc<Mutex<Weights>>.
+                            
+                            // METHOD: Separate AI Thread
+                            let ai_weights = Arc::new(std::sync::Mutex::new((33u64, 33u64, 34u64)));
+                            let ai_weights_clone = ai_weights.clone();
+                            let ai_running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+                            let ai_running_clone = ai_running.clone();
+                            
+                            tokio::spawn(async move {
+                                while ai_running_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                                    // 1. Read Threat Level
+                                    let bus = NeuralBus::read();
+                                    let active_threat = bus.threat_level != ThreatLevel::Safe;
+                                    
+                                    // 2. Query DeepSeek
+                                    // Mock RTTs for now (in real app, share rtt state)
+                                    let rtts = [0.020, 0.005, 0.005]; 
+                                    
+                                    if let Some(weights) = turbonet::deepseek_weights::query_deepseek_strategy(rtts, active_threat).await {
+                                        *ai_weights_clone.lock().unwrap() = (weights.w0, weights.w1, weights.w2);
+                                        // Update GUI
+                                        // Note: We can't send easily from here without cloning 'send' which is tricky.
+                                        // Ideally 'send' channel should be cloned for this thread.
+                                    }
+                                    tokio::time::sleep(Duration::from_secs(5)).await;
+                                }
+                            });
 
                             for block_idx in 0..total_blocks {
+                                // Refresh weights from AI thread
+                                {
+                                    let w = ai_weights.lock().unwrap();
+                                    w0 = w.0; w1 = w.1; w2 = w.2;
+                                }
+                                
+                                // Send weight update to GUI occasionaly
+                                if block_idx % 10 == 0 {
+                                    send(GuiUpdate::Weights((w0, w1, w2)));
+                                }
+
                                 let start = block_idx * block_size;
                                 let end = (start + block_size).min(total_len);
                                 let block_data = &payload[start..end];
@@ -326,6 +417,7 @@ impl eframe::App for MissionControlGui {
 
                             send(GuiUpdate::Status("Mission Success!".to_string()));
                             send(GuiUpdate::Finished);
+                            ai_running.store(false, std::sync::atomic::Ordering::Relaxed);
                         });
                     });
                 }

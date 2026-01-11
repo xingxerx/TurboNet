@@ -14,29 +14,44 @@
 
 ---
 
-## 🛠️ The Tech Stack
+## 🏗️ Architecture & Tech Stack
 
--   **Frontend**: `egui` + `eframe` (High-performance 60FPS Immediate Mode GUI).
--   **Security**: `pqc_kyber` (Kyber-768/ML-KEM) + `aes-gcm` (AES-256).
--   **Intelligence**: `DeepSeek-R1:8b` (Local LLM via Ollama).
--   **Performance**: `CUDA 13.0` (Hardware-parallel shredding).
--   **Network**: `Tokio` (Async UDP multi-band blasting).
+TurboNet is built on a **Dual-AI Architecture**, separating strategic optimization from tactical defense.
+
+### 🧠 The Dual-Brain System
+1.  **Strategic Engine (DeepSeek-R1)**:
+    *   **Role**: Network Optimization & Shredding Logic.
+    *   **Location**: `src/deepseek_weights.rs` & `mission_control`.
+    *   **Function**: Analyzes real-time lane congestion (RTT/Packet Loss) to calculate optimal `w0, w1, w2` shredding weights.
+    *   **Config**: Controlled via `OLLAMA_MODEL` env var.
+
+2.  **Tactical Engine (GPT-OSS)**:
+    *   **Role**: Unsupervised Traffic Analysis & Active Defense.
+    *   **Location**: `turbonet-core/src/ai_defense.rs` & `tools/src/net_guard.rs`.
+    *   **Function**: Analyzes captured UDP/TCP payloads for anomalies (SQLi, beacons) to enforce blocking rules.
+    *   **Config**: Controlled via CLI args (`--model ollama:gpt-oss`).
+
+### 🛠️ Core Technology
+-   **System**: Rust (2021 Edition) + Tokio (Async Runtime).
+-   **Compute**: CUDA 13.0 (NVIDIA GPU Acceleration).
+-   **Security**: `pqc_kyber` (Post-Quantum Key Exchange) + AES-256-GCM.
+-   **GUI**: `egui` (Immediate Mode, OpenGL backend).
 
 ---
 
-## 🚀 Key Features
+## � Core Modules
 
-### ⚛️ Level 9: The Lattice-Based Ghost
-TurboNet uses **Module-Lattice (ML-KEM)** math to perform a quantum-safe handshake. The session key is never shared over the wire; it is encapsulated and decrypted using Kyber-768, protecting your data against future quantum computers (**Harvest Now, Decrypt Later Resistance**).
+### 1. Quantum Ghost (Level 9)
+*Directory: `src/crypto.rs` / `src/bin/receiver.rs`*
+Implements the **Harvest Now, Decrypt Later** resistance mechanism. Uses **ML-KEM (Kyber-768)** to derive a 256-bit AES session key. This handshake occurs *out-of-band* or pre-shared if configured, ensuring the key is never exposed to quantum listeners on the data lanes.
 
-### 🧠 Level 8: The Neural Strategist
-Integrated **DeepSeek-R1** monitors your network lanes in real-time. If the 2.4GHz band gets congested while the 5GHz bands are clear, the AI automatically re-calculates the GPU shredding weights (w0, w1, w2) to shift traffic to the fastest path.
+### 2. Neural Strategist (Level 8)
+*Directory: `src/shredder.rs` / `src/bin/mission_control.rs`*
+The "Planner". It connects to your local Ollama instance running **DeepSeek-R1**. It queries the model with network telemetry ("Lane 1: 50ms, Lane 2: 200ms") and applies the returned weights to the GPU Kernel.
 
-### 🖥️ Level 10: Mission Control Dashboard
-A dedicated visual dashboard for selecting files, monitoring "Sonic Probes" (RTT gauges), and initiating the "Quantum Blast" with a single click.
-
-### 🛡️ Level 11: The Cyber Sentinel (Traffic Guard)
-An active defense system utilizing **GPT-OSS** (open-weight AI models) to monitor network traffic in real-time. The "Cyber Security Analyst" agent analyzes packet payloads for malicious patterns (SQLi, beacons, port scans) and actively blocks hostile IPs using a user-space firewall.
+### 3. Cyber Sentinel (Level 11)
+*Directory: `tools/src/net_guard.rs` / `turbonet-core`*
+The "Enforcer". An independent agent that sits on the edge network. It uses **GPT-OSS** (like `llama3` or `gpt-4o`) to classify raw hex streams. It implements a user-space firewall that silently drops packets from IP addresses flagged by the LLM.
 
 ---
 

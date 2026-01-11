@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::UdpSocket;
 use tokio::time::interval;
 use turbonet_core::ai_defense::{DefenseAdvisor, TrafficPacket, DecisionType, parse_model_spec};
+use turbonet_core::neural_link::NeuralBus;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -124,13 +125,24 @@ async fn run_guard(port: u16, model_spec: &str) -> Result<(), Box<dyn std::error
                          match result {
                              Ok(decisions) => {
                                  let mut blocked = blocked_ips_async.lock().unwrap();
+                                 let mut active_threats = 0;
+                                 let mut impacted_lanes = Vec::new();
+
                                  for d in decisions {
                                      if d.decision == DecisionType::Block {
                                          println!("🚫 BLOCKING {} (Confidence: {}%): {}", d.ip, d.confidence, d.reason);
                                          blocked.insert(d.ip);
+                                         active_threats += 1;
+                                         impacted_lanes.push("UDP".to_string());
                                      } else if d.decision == DecisionType::Monitor {
                                          println!("⚠️  MONITORING {}: {}", d.ip, d.reason);
                                      }
+                                 }
+
+                                 // Update Neural Bus
+                                 if active_threats > 0 {
+                                     println!("📡 Updating Neural Bus with {} threats...", active_threats);
+                                     NeuralBus::update(active_threats, impacted_lanes, Some("Active Attack Detected".to_string()));
                                  }
                              }
                              Err(e) => eprintln!("❌ Analyst Error: {}", e),

@@ -8,7 +8,8 @@ pub mod gui; // Links src/gui.rs
 // SOTA Performance Modules
 pub mod io_backend;  // Pluggable I/O backends (Phase 1)
 pub mod ai_weights;  // Local AI inference (Phase 3)
-pub mod ai_defense;  // AI-powered defense advisor
+pub mod ai_defense;
+pub mod neural_link;  // AI-powered defense advisor
 
 #[cfg(feature = "fec")]
 pub mod fec;  // Forward Error Correction (Phase 2)

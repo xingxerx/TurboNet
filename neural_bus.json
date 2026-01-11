@@ -1,0 +1,9 @@
+{
+  "last_updated": 1768099275,
+  "threat_level": "ELEVATED",
+  "active_threats": 1,
+  "impacted_lanes": [
+    "UDP"
+  ],
+  "tactical_advice": "Active Attack Detected"
+}
