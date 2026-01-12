@@ -8,7 +8,9 @@
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use turbonet_core::ai_defense::{DefenseAdvisor, ScanFindings, Finding, Severity, parse_model_spec};
+use turbonet_core::ai_defense::{DefenseAdvisor, ScanFindings, Finding, Severity};
+use turbonet_core::ai_client::{AiClient, parse_model_spec};
+use turbonet_core::world_gen::WorldGenerator;
 
 #[derive(Parser)]
 #[command(name = "turbonet")]
@@ -39,6 +41,21 @@ enum Commands {
         /// Output format (json or text)
         #[arg(long, default_value = "text")]
         format: String,
+    },
+
+    /// Infinite Procedural World Generator
+    World {
+        /// AI model to use
+        #[arg(long, default_value = "ollama:gpt-oss")]
+        model: String,
+
+        /// World theme (e.g. "Cyberpunk", "Fantasy", "Zombie Apocalypse")
+        #[arg(long, default_value = "Cyberpunk Neo-Tokyo")]
+        theme: String,
+
+        /// Enable NVIDIA GPU Acceleration for Chaos Theory (requires CUDA)
+        #[arg(long)]
+        nvidia: bool,
     },
 
     /// Run network scanner (port scan)
@@ -205,6 +222,9 @@ async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Er
     match command {
         Commands::Defend { input, demo, model, format } => {
             run_defense_advisor(input, demo, &model, &format).await?;
+        }
+        Commands::World { model, theme, nvidia } => {
+            run_world_generator(&model, &theme, nvidia).await?;
         }
         Commands::Scan { target, ports } => {
             println!("🔍 Scanning {} ports {}...", target, ports);
@@ -408,6 +428,92 @@ fn print_defense_report(report: &turbonet_core::ai_defense::DefenseReport) {
     println!("═══════════════════════════════════════════════════════════");
 }
 
+use turbonet_core::spectre::SpectreEngine;
+
+async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🌍 TurboNet Infinite World Generator");
+    println!("Theme: {}", theme);
+    
+    // Select model logic
+    let mut selected_model = model.to_string();
+    if use_nvidia && model == "ollama:gpt-oss" {
+        println!("🚀 NVIDIA Mode Active: Switching to DeepSeek-Coder for advanced reasoning...");
+        selected_model = "ollama:deepseek-coder".to_string();
+    }
+    println!("Model: {}", selected_model);
+
+    // Initialize Spectre (Chaos Engine) if requested
+    let mut chaos_engine = None;
+    if use_nvidia {
+        println!("⚛️ Initializing SPECTRE-GPU for Quantum Entropy...");
+        match SpectreEngine::new() {
+            Ok(engine) => {
+                println!("   → GPU Online. Chaos Injection Enabled.");
+                chaos_engine = Some(engine);
+            }
+            Err(e) => {
+                eprintln!("   ⚠️ Failed to load CUDA engine: {}", e);
+                eprintln!("   → Falling back to standard CPU physics.");
+            }
+        }
+    }
+
+    println!("Loading...");
+
+    let client = AiClient::from_spec(&selected_model);
+    let mut world = WorldGenerator::new(client, theme, chaos_engine);
+
+    // Initial scene
+    match world.initialize().await {
+        Ok(scene) => {
+            println!("\n╔══════════════════════════════════════════════════════════╗");
+            println!("{}\n", textwrap::fill(&scene, 60));
+            println!("╚══════════════════════════════════════════════════════════╝");
+        }
+        Err(e) => {
+            let err_msg = e.to_string();
+            if err_msg.contains("connection refused") || err_msg.contains("target machine actively refused") {
+                 eprintln!("\n❌ Connection Failed: Could not connect to the AI engine.");
+                 eprintln!("   Please ensure Ollama is running (e.g., `ollama serve`).");
+            } else if err_msg.contains("404") || err_msg.contains("not found") {
+                 eprintln!("\n❌ Model Missing: The AI model could not be found.");
+                 eprintln!("   Please run: `ollama pull deepseek-coder`");
+                 eprintln!("   (Or specify a different model with --model)");
+            } else {
+                 eprintln!("Error initializing world: {}", e);
+            }
+            return Ok(());
+        }
+    }
+
+    let mut rl = rustyline::DefaultEditor::new()?;
+    
+    loop {
+        let readline = rl.readline("\n> ");
+        match readline {
+            Ok(line) => {
+                let action = line.trim();
+                if action.is_empty() { continue; }
+                if action.eq_ignore_ascii_case("exit") || action.eq_ignore_ascii_case("quit") {
+                    break;
+                }
+                
+                let _ = rl.add_history_entry(action);
+                
+                println!("Thinking...");
+                match world.next_turn(action).await {
+                    Ok(response) => {
+                        println!("\n{}", textwrap::fill(&response, 60));
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            },
+            Err(_) => break,
+        }
+    }
+    Ok(())
+}
+
 fn print_tool_list() {
     println!(r#"
 ╔══════════════════════════════════════════════════════════════════╗
@@ -440,6 +546,9 @@ fn print_tool_list() {
 ║                                                                  ║
 ║  AI DEFENSE                                                      ║
 ║    turbonet defend    AI-powered defense recommendations         ║
+║                                                                  ║
+║  WORLD GEN                                                       ║
+║    turbonet world     Infinite Procedural World Generator        ║
 ╚══════════════════════════════════════════════════════════════════╝
 "#);
 }

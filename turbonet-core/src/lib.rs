@@ -9,7 +9,10 @@ pub mod gui; // Links src/gui.rs
 pub mod io_backend;  // Pluggable I/O backends (Phase 1)
 pub mod ai_weights;  // Local AI inference (Phase 3)
 pub mod ai_defense;
+pub mod ai_client;   // Shared AI Client logic
 pub mod neural_link;  // AI-powered defense advisor
+pub mod world_gen;    // Infinite procedural world generator
+pub mod physics_world;
 
 #[cfg(feature = "fec")]
 pub mod fec;  // Forward Error Correction (Phase 2)

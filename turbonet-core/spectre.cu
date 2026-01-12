@@ -327,4 +327,114 @@ extern "C" __global__ void spectre_decode_kernel(
             output[idx] = input[idx] ^ key_byte;
         }
     }
+    }
+}
+
+// ============================================================================
+// TERRAIN GENERATION KERNEL
+// ============================================================================
+
+/**
+ * Simple pseudo-random hash for noise generation
+ */
+__device__ float hash2d(float x, float y) {
+    float prod = x * 12.9898 + y * 78.233;
+    float sn = sinf(prod);
+    return sn * 43758.5453 - floorf(sn * 43758.5453);
+}
+
+/**
+ * Bilinear interpolation
+ */
+__device__ float lerp_f(float a, float b, float t) {
+    return a + t * (b - a);
+}
+
+/**
+ * Value Noise 2D
+ */
+__device__ float value_noise(float x, float y) {
+    float i_x = floorf(x);
+    float i_y = floorf(y);
+    float f_x = x - i_x;
+    float f_y = y - i_y;
+    
+    // Four corners
+    float a = hash2d(i_x,     i_y);
+    float b = hash2d(i_x + 1.0, i_y);
+    float c = hash2d(i_x,     i_y + 1.0);
+    float d = hash2d(i_x + 1.0, i_y + 1.0);
+    
+    // Smooth interpolation
+    float u_x = f_x * f_x * (3.0 - 2.0 * f_x);
+    float u_y = f_y * f_y * (3.0 - 2.0 * f_y);
+    
+    return lerp_f(lerp_f(a, b, u_x), lerp_f(c, d, u_x), u_y);
+}
+
+/**
+ * Fractal Brownian Motion (FBM) for terrain detail
+ */
+__device__ float fbm(float x, float y, int octaves) {
+    float total = 0.0f;
+    float amplitude = 1.0f;
+    float frequency = 1.0f;
+    float max_value = 0.0f;  // Used for normalizing result to 0.0 - 1.0
+
+    for(int i = 0; i < octaves; i++) {
+        total += value_noise(x * frequency, y * frequency) * amplitude;
+        max_value += amplitude;
+        
+        amplitude *= 0.5f;
+        frequency *= 2.0f;
+    }
+    
+    return total / max_value;
+}
+
+/**
+ * GPU Kernel: Generate Terrain Heightmap
+ * 
+ * Generates a heightmap for a world based on a seed.
+ * 
+ * @param heightmaps  Output array for all generated worlds [world_idx][y][x]
+ * @param width       Width of the heightmap
+ * @param height      Height of the heightmap
+ * @param num_worlds  Number of worlds to generate (batch size)
+ * @param seeds       Array of seeds for each world
+ */
+extern "C" __global__ void terrain_gen_kernel(
+    float* heightmaps,
+    int width,
+    int height,
+    int num_worlds,
+    unsigned long long* seeds
+) {
+    // Current World Index
+    int world_idx = blockIdx.z; 
+    if (world_idx >= num_worlds) return;
+    
+    // Current Pixel Coordinates
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x >= width || y >= height) return;
+    
+    // Calculate global index in the massive array
+    // Flat index = world_offset + row_offset + col_offset
+    int flat_idx = (world_idx * width * height) + (y * width) + x;
+    
+    // Use world-specific seed
+    unsigned long long seed = seeds[world_idx];
+    
+    // Coordinate scaling
+    float scale = 0.02f;
+    float px = (x + (seed % 1000)) * scale;
+    float py = (y + (seed / 1000)) * scale;
+    
+    // Generate height using FBM (4 octaves)
+    float h = fbm(px, py, 4);
+    
+    // Apply some non-linear shaping for ridges
+    heightmaps[flat_idx] = powf(h, 1.2f) * 50.0f; // Scale to 0-50 meters
 }

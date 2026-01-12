@@ -3,9 +3,9 @@
 //! Analyzes pentest scan results and provides hardening recommendations
 //! using local Ollama or OpenAI-compatible APIs.
 
-use reqwest::Client;
+
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+
 
 /// Scan findings from various TurboNet tools
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,35 +50,25 @@ pub struct Recommendation {
     pub implementation: String,
 }
 
+use crate::ai_client::AiClient;
+
 /// AI Defense Advisor using local Ollama or OpenAI-compatible API
 pub struct DefenseAdvisor {
-    client: Client,
-    api_url: String,
-    model: String,
+    client: AiClient,
 }
 
 impl DefenseAdvisor {
     /// Create advisor with Ollama backend (default)
     pub fn ollama(model: &str) -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(120))
-                .build()
-                .unwrap(),
-            api_url: "http://localhost:11434/api/generate".to_string(),
-            model: model.to_string(),
+            client: AiClient::ollama(model),
         }
     }
 
     /// Create advisor with OpenAI-compatible API
-    pub fn openai_compatible(api_url: &str, model: &str, _api_key: Option<&str>) -> Self {
+    pub fn openai_compatible(api_url: &str, model: &str, api_key: Option<&str>) -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(60))
-                .build()
-                .unwrap(),
-            api_url: api_url.to_string(),
-            model: model.to_string(),
+            client: AiClient::openai_compatible(api_url, model, api_key),
         }
     }
 
@@ -86,7 +76,7 @@ impl DefenseAdvisor {
     pub async fn suggest_defenses(&self, findings: &ScanFindings) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = self.build_prompt(findings);
         
-        let response = self.call_llm(&prompt).await?;
+        let response = self.client.generate(&prompt).await?;
         
         // Parse AI response into structured report
         self.parse_response(&response, findings)
@@ -131,40 +121,7 @@ Focus on actionable, specific mitigations. Prioritize by severity."#,
         )
     }
 
-    async fn call_llm(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        #[derive(Serialize)]
-        struct OllamaRequest<'a> {
-            model: &'a str,
-            prompt: &'a str,
-            stream: bool,
-        }
-
-        #[derive(Deserialize)]
-        struct OllamaResponse {
-            response: String,
-        }
-
-        let request = OllamaRequest {
-            model: &self.model,
-            prompt,
-            stream: false,
-        };
-
-        let response = self.client
-            .post(&self.api_url)
-            .json(&request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!("LLM API error {}: {}", status, text).into());
-        }
-
-        let ollama_resp: OllamaResponse = response.json().await?;
-        Ok(ollama_resp.response)
-    }
+    // Removed local call_llm in favor of self.client.generate()
 
     fn parse_response(&self, response: &str, findings: &ScanFindings) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
         // Try to extract JSON from response
@@ -195,12 +152,7 @@ Focus on actionable, specific mitigations. Prioritize by severity."#,
 
 /// Parse model string like "ollama:deepseek-coder" or "openai:gpt-4o"
 pub fn parse_model_spec(spec: &str) -> (String, String) {
-    let parts: Vec<&str> = spec.splitn(2, ':').collect();
-    if parts.len() == 2 {
-        (parts[0].to_string(), parts[1].to_string())
-    } else {
-        ("ollama".to_string(), spec.to_string())
-    }
+    crate::ai_client::parse_model_spec(spec)
 }
 
 /// Network packet metadata for analysis
@@ -238,7 +190,7 @@ impl DefenseAdvisor {
         }
 
         let prompt = self.build_traffic_prompt(packets);
-        let response = self.call_llm(&prompt).await?;
+        let response = self.client.generate(&prompt).await?;
         self.parse_traffic_response(&response)
     }
 

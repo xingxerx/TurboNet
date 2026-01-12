@@ -39,7 +39,7 @@ pub struct SpectreEngine {
 
 impl SpectreEngine {
     /// Initialize the SPECTRE-GPU engine
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let device = CudaDevice::new(0)?;
         
         // Load the SPECTRE PTX module
@@ -49,13 +49,14 @@ impl SpectreEngine {
             "spectre_mutate_kernel",
             "spectre_find_best_kernel",
             "spectre_decode_kernel",
+            "terrain_gen_kernel",
         ])?;
         
         Ok(Self { device })
     }
     
     /// Initialize from existing device (reuse TurboNet's CUDA context)
-    pub fn from_device(device: Arc<CudaDevice>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_device(device: Arc<CudaDevice>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // Load the SPECTRE PTX module
         let ptx = std::fs::read_to_string("spectre.ptx")
             .map_err(|_| "spectre.ptx not found - run cargo build first")?;
@@ -63,6 +64,7 @@ impl SpectreEngine {
             "spectre_mutate_kernel",
             "spectre_find_best_kernel",
             "spectre_decode_kernel",
+            "terrain_gen_kernel",
         ])?;
         
         Ok(Self { device })
@@ -84,7 +86,7 @@ impl SpectreEngine {
         num_variants: u32,
         salt: u64,
         mode: MutationMode,
-    ) -> Result<MutationResult, Box<dyn std::error::Error>> {
+    ) -> Result<MutationResult, Box<dyn std::error::Error + Send + Sync>> {
         let len = payload.len();
         let num_variants = num_variants as usize;
         
@@ -169,7 +171,7 @@ impl SpectreEngine {
         salt: u64,
         variant_index: u32,
         mode: MutationMode,
-    ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
         if mode != MutationMode::Xor && mode != MutationMode::Cascade {
             return Err("Only XOR and CASCADE modes are reversible".into());
         }
@@ -198,6 +200,62 @@ impl SpectreEngine {
         }
         
         Ok(self.device.dtoh_sync_copy(&d_output)?)
+    }
+
+
+    /// Generate a batch of procedural terrain heightmaps on the GPU
+    ///
+    /// # Arguments
+    /// * `width` - Width of the terrain grid
+    /// * `height` - Height of the terrain grid
+    /// * `num_worlds` - Number of parallel worlds to generate
+    /// * `master_seed` - Seed for PRNG to generate sub-seeds
+    ///
+    /// # Returns
+    /// A single large vector containing float heightmaps for all worlds.
+    /// Indexing: [world_idx * width * height + y * width + x]
+    pub async fn generate_terrain_batch(
+        &self,
+        width: usize,
+        height: usize,
+        num_worlds: usize,
+        master_seed: u64,
+    ) -> Result<Vec<f32>, Box<dyn std::error::Error + Send + Sync>> {
+        let total_pixels = width * height * num_worlds;
+        
+        // 1. Generate seeds for each world
+        use std::hash::{Hash, Hasher};
+        let mut seeds = Vec::with_capacity(num_worlds);
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for i in 0..num_worlds {
+            master_seed.hash(&mut hasher);
+            i.hash(&mut hasher);
+            seeds.push(hasher.finish());
+        }
+        
+        // 2. Upload seeds to GPU
+        let d_seeds = self.device.htod_copy(seeds)?;
+        
+        // 3. Allocate output buffer
+        let mut d_heightmaps: CudaSlice<f32> = self.device.alloc_zeros(total_pixels)?;
+        
+        // 4. Launch Kernel
+        let cfg = LaunchConfig::for_num_elems(total_pixels as u32);
+        let gen_func = self.device.get_func("spectre", "terrain_gen_kernel")
+            .ok_or("terrain_gen_kernel not found on GPU")?;
+            
+        unsafe {
+            gen_func.launch(cfg, (
+                &mut d_heightmaps,
+                width as i32,
+                height as i32,
+                num_worlds as i32,
+                &d_seeds
+            ))?;
+        }
+        
+        // 5. Read back results
+        Ok(self.device.dtoh_sync_copy(&d_heightmaps)?)
     }
 }
 
