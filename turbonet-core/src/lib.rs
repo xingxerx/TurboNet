@@ -13,6 +13,7 @@ pub mod ai_client;   // Shared AI Client logic
 pub mod neural_link;  // AI-powered defense advisor
 pub mod world_gen;    // Infinite procedural world generator
 pub mod physics_world;
+pub mod brain;        // The new Brain Orchestrator
 
 #[cfg(feature = "fec")]
 pub mod fec;  // Forward Error Correction (Phase 2)

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use turbonet_core::ai_defense::{DefenseAdvisor, ScanFindings, Finding, Severity};
 use turbonet_core::ai_client::{AiClient, parse_model_spec};
 use turbonet_core::world_gen::WorldGenerator;
+use turbonet_core::brain::{Brain, Intent}; // Import Brain
 
 #[derive(Parser)]
 #[command(name = "turbonet")]
@@ -56,6 +57,18 @@ enum Commands {
         /// Enable NVIDIA GPU Acceleration for Chaos Theory (requires CUDA)
         #[arg(long)]
         nvidia: bool,
+
+    },
+
+    /// Run Physics Simulation (Spectre + Rapier3D)
+    Simulate {
+        /// Number of worlds to generate on GPU (Batch Size)
+        #[arg(long, default_value_t = 16)]
+        batch_size: usize,
+
+        /// Simulation steps to run
+        #[arg(long, default_value_t = 600)]
+        steps: usize,
     },
 
     /// Run network scanner (port scan)
@@ -92,6 +105,20 @@ enum Commands {
 
         #[command(subcommand)]
         action: GuardAction,
+    },
+
+    /// The Brain: Intent-based Automatic Mode
+    Brain {
+        /// The query or intent (e.g., "scan localhost", "analyze malware")
+        query: Vec<String>,
+
+        /// AI model for intent classification
+        #[arg(long, default_value = "ollama:gpt-oss")]
+        model: String,
+
+        /// Execute the action immediately without asking
+        #[arg(long)]
+        force: bool,
     },
 
     /// List all available tools
@@ -230,6 +257,9 @@ async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Er
             println!("🔍 Scanning {} ports {}...", target, ports);
             println!("   → Run: cargo run -p tools --bin net-sniffer -- scan {}", target);
         }
+        Commands::Simulate { batch_size, steps } => {
+            run_simulation(batch_size, steps).await?;
+        }
         Commands::Spectre { action } => {
             match action {
                 SpectreAction::Mutate { input, output } => {
@@ -292,6 +322,10 @@ async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Er
                     }
                 }
             }
+        }
+        Commands::Brain { query, model, force } => {
+            let query_str = query.join(" ");
+            run_brain_mode(&query_str, &model, force).await?;
         }
     }
     Ok(())
@@ -424,11 +458,22 @@ fn print_defense_report(report: &turbonet_core::ai_defense::DefenseReport) {
         }
         println!();
     }
-
     println!("═══════════════════════════════════════════════════════════");
 }
 
 use turbonet_core::spectre::SpectreEngine;
+
+async fn run_simulation(batch_size: usize, steps: usize) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🧪 Running Physics Simulation (Spectre + Rapier3D)");
+    println!("   • Batch Size: {}", batch_size);
+    println!("   • Steps: {}", steps);
+    
+    // For now, just a placeholder or basic loop
+    // In a real implementation we would initialize PhysicsWorld here
+    println!("   (Simulation logic would run here)");
+    
+    Ok(())
+}
 
 async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 TurboNet Infinite World Generator");
@@ -574,3 +619,47 @@ fn print_system_info() {
     println!("  • OpenAI (cloud)    → openai:gpt-4o (requires OPENAI_API_KEY)");
     println!("═══════════════════════════════════════════════════════════");
 }
+
+async fn run_brain_mode(
+    query: &str,
+    model: &str,
+    force: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    println!("🧠 TurboNet Brain: Analyzing intent for '{}'...", query);
+
+    let brain = Brain::new(Some(model.to_string()));
+    let intent = brain.perceive(query).await?;
+    
+    // In a real agentic loop, we would act on the intent here.
+    // For now, we delegate to the Brain to tell us what it WOULD do.
+    let plan = brain.process_intent(intent.clone());
+
+    println!("{}", plan);
+
+    if force {
+        println!("🚀 Force enabled. Executing logic (mock)...");
+        // Here we would actually call the sub-functions (run_scan, etc.)
+        // This connects the specific "section that is needed".
+        match intent {
+             Intent::Scan { target, ports } => {
+                 // Call the existing logic
+                 println!("   [Firing Network Scanner]");
+                 println!("🔍 Scanning {} ports {}...", target, ports);
+             }
+             Intent::Defend { input: _ } => {
+                 println!("   [Firing Defense Advisor]");
+                 // In real impl, we would need the input path
+             }
+             Intent::World { theme } => {
+                 println!("   [Firing World Gen]");
+                 run_world_generator(model, &theme, false).await?;
+             }
+             _ => {}
+        }
+    } else {
+        println!("\n(Run with --force to execute automatically)");
+    }
+
+    Ok(())
+}
+
