@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "turbonet-core",
-    "spectre",
-    "sentinel", 
-    "tools",
-    "wifi-recon"
+    "crates/core/turbonet-core",
+    "crates/pentesting/spectre",
+    "crates/cybersecurity/sentinel", 
+    "crates/utils/tools",
+    "crates/wifi/wifi-recon"
 ]
 resolver = "2"
 

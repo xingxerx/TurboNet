@@ -14,6 +14,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Snyk CLI
         uses: snyk/actions/setup@master
+      - name: Install Python dependencies
+        run: |
+          pip install -r py_src/requirements.txt
+          pip install cirq numpy # Explicitly install missing deps mentioned in error if not in requirements.txt
       - name: Snyk Test
         run: snyk test --all-projects --severity-threshold=high
         env:

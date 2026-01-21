@@ -106,90 +106,59 @@ cargo run --release --bin mission_control --
 
 ---
 
-## 📝 All Command-Line Invocations
+## 🏢 Government & Compliance (Modules)
+TurboNet includes modules specifically designed for authorized government and defense sectors, adhering to strict compliance and auditing standards.
 
-You can run the main binaries using Cargo as follows:
+### 🛡️ Cyber Sentinel (`crates/cybersecurity/sentinel`)
+-   **Security Clearance**: Level 11
+-   **Function**: Autonomous Active Defense & Traffic Filtering.
+-   **Compliance**: Implements standard blocking rules and logs all neutralizing actions for audit trails.
+-   **Use Case**: perimeter defense for sensitive infrastructure.
 
-```bash
-# Run the Ghost Receiver (replace <TOTAL_BYTES> with your value)
-cargo run --release --bin receiver -- <TOTAL_BYTES>
-
-# Run Mission Control (GUI Controller)
-cargo run --release --bin mission_control --
-
-# Run the Legacy Command-Line Shredder
-cargo run --release --bin shred --
-
-# Run the AI Traffic Guard (Active Defense)
-turbonet guard start --port 8888 --model ollama:gpt-oss
-
-# OR run from source:
-cargo run -p turbonet-core --bin turbonet -- guard start --port 8888 --model ollama:gpt-oss
-```
-
-Or run the built executables directly:
-
-```bash
-./target/release/receiver.exe <TOTAL_BYTES>
-./target/release/mission_control.exe
-./target/release/shred.exe
-```
-
-1.  **Select Payload**: Click "📂 SELECT TARGET PAYLOAD" to pick your file.
-2.  **Telemetry**: Observe the **Neural Radar** (gauges) as they probe your 2.4GHz/5GHz lanes.
-3.  **Blast**: Click "🚀 INITIATE QUANTUM BLAST".
-    -   Handshake: Derives session entropy via Kyber shards.
-    -   AI Strategy: DeepSeek-R1 decides the lane distribution.
-    -   Streaming: CUDA shards and encrypts data in real-time.
+### 📜 Operations (`turbonet_ops`)
+-   **Standard**: ISO/IEC 27001 & NIST 800-53 compatiable workflows.
+-   **Auditing**: Automated Snyk security scans and Criterion performance benchmarking.
 
 ---
-
-## ⚡ Hardware/Environment Warning
-
-> **For best results:**
-> - Run all TurboNet binaries from Windows, not WSL.
-> - Ensure NVIDIA drivers and CUDA Toolkit are installed on Windows.
-> - Your 2.5Gbps Ethernet and GPU will only be fully utilized when running natively.
-
----
-
-## 🛡️ Security Protocol (Quantum Mesh)
-When you "Blast," the Kyber ciphertext (CT) is itself shredded across the three network ports (`8001`, `8002`, `8003`). An attacker would need to intercept **all three physical bands simultaneously** AND possess a **4000+ qubit Quantum Computer** to compromise the session.
 
 ## 📂 Project Structure
 
-### Binaries
-- `src/bin/mission_control.rs`: The v4.0 GUI Controller (AI, dashboard, async UDP).
-- `src/bin/receiver.rs`: The Ghost Receiver (reassembles fragments, quantum handshake).
-- `src/bin/turbonet.rs`: Unified CLI orchestrator for all security tools.
-- `src/bin/shred.rs`: Legacy Command-Line Shredder (manual blast).
-- `src/bin/Memory-Safe_Listener.rs`: UDP echo node for connection verification.
-- `src/bin/broadcaster.rs`: Multi-band broadcaster (demo, placeholder).
-- `src/bin/check_lanes.rs`: Lane detection utility (Ethernet/Starlink).
-- `src/bin/flood.rs`: UDP flood speed test.
-- `src/bin/scan.rs`: Hardware lane scanner.
-- `src/bin/tokio.rs`: Tokio async demo.
-- `tools/src/net_guard.rs`: AI active defense and traffic blocking.
+The codebase is organized into modular crates for security isolation and maintainability:
 
-### Core Source Files
-- `src/lib.rs`: Links modules (deepseek_weights, network, shredder).
-- `src/deepseek_weights.rs`: DeepSeek AI weights logic and validation.
-- `src/network.rs`: Lane probing, hardware binding, network interface logic.
-- `src/shredder.rs`: Orchestrates GPU kernel, applies AI weights.
-- `src/crypto.rs`: Quantum session handshake (Kyber, AES-GCM).
+### 🧱 Core (`crates/core`)
+-   `turbonet-core`: The heart of the system. Contains the `Brain` (DeepSeek-R1 logic), `Shredder` (GPU Kernels), `Crypto` (Kyber/AES), and the main `Mission Control` GUI.
 
-### CUDA & PTX
-- `shredder.cu`: CUDA kernel for asymmetric shredding.
-- `shredder.ptx`: Compiled PTX for GPU execution.
-- `build.rs`: Auto-compiles CUDA kernel to PTX.
+### 📡 WiFi (`crates/wifi`)
+-   `wifi-recon`: Quantum-ready WiFi scanning and analysis tools (`quantum_hound`).
 
-### Other
-- `Cargo.toml`: Rust dependencies and features.
-- `README.md`: This documentation.
+### ⚔️ Pentesting (`crates/pentesting`)
+-   `spectre`: Advanced polymorphic payload generator and quantum threat analyzer.
+
+### 🛡️ Cybersecurity (`crates/cybersecurity`)
+-   `sentinel`: AI-driven active defense and packet inspection algorithms.
+
+### 🛠️ Utilities (`crates/utils`)
+-   `tools`: General purpose networking and diagnostic tools.
 
 ---
-**Available binaries:**
-Memory-Safe_Listener, broadcaster, check_lanes, flood, mission_control, receiver, scan, shred, tokio
+
+## 📝 All Command-Line Invocations
+
+You can run the main binaries using Cargo as follows (paths updated for new structure):
+
+```bash
+# Run the Ghost Receiver
+cargo run -p turbonet-core --bin receiver -- <TOTAL_BYTES>
+
+# Run Mission Control (GUI Controller)
+cargo run -p turbonet-core --bin mission_control --
+
+# Run the Legacy Command-Line Shredder
+cargo run -p turbonet-core --bin shred --
+
+# Run the AI Traffic Guard
+cargo run -p turbonet-core --bin turbonet -- guard start --port 8888 --model ollama:gpt-oss
+```
 
 ---
 **The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆

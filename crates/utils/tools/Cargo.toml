@@ -8,7 +8,7 @@ description = "Security analysis utilities"
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-turbonet-core = { path = "../turbonet-core" }
+turbonet-core = { path = "../../core/turbonet-core" }
 
 
 [[bin]]
