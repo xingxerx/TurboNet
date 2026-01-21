@@ -1,11 +1,9 @@
 //! AI-Powered Defense Advisor
-//! 
+//!
 //! Analyzes pentest scan results and provides hardening recommendations
 //! using local Ollama or OpenAI-compatible APIs.
 
-
 use serde::{Deserialize, Serialize};
-
 
 /// Scan findings from various TurboNet tools
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,19 +71,23 @@ impl DefenseAdvisor {
     }
 
     /// Analyze scan findings and return defense recommendations
-    pub async fn suggest_defenses(&self, findings: &ScanFindings) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn suggest_defenses(
+        &self,
+        findings: &ScanFindings,
+    ) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = self.build_prompt(findings);
-        
+
         let response = self.client.generate(&prompt).await?;
-        
+
         // Parse AI response into structured report
         self.parse_response(&response, findings)
     }
 
     fn build_prompt(&self, findings: &ScanFindings) -> String {
         let findings_json = serde_json::to_string_pretty(&findings.findings).unwrap_or_default();
-        
-        format!(r#"You are a cybersecurity defense expert. Analyze these penetration test findings and provide defensive recommendations.
+
+        format!(
+            r#"You are a cybersecurity defense expert. Analyze these penetration test findings and provide defensive recommendations.
 
 ## Scan Context
 - Tool: {}
@@ -115,19 +117,21 @@ Provide your response in this exact JSON structure:
 ```
 
 Focus on actionable, specific mitigations. Prioritize by severity."#,
-            findings.tool,
-            findings.target,
-            findings_json
+            findings.tool, findings.target, findings_json
         )
     }
 
     // Removed local call_llm in favor of self.client.generate()
 
-    fn parse_response(&self, response: &str, findings: &ScanFindings) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_response(
+        &self,
+        response: &str,
+        findings: &ScanFindings,
+    ) -> Result<DefenseReport, Box<dyn std::error::Error + Send + Sync>> {
         // Try to extract JSON from response
         let json_start = response.find('{');
         let json_end = response.rfind('}');
-        
+
         if let (Some(start), Some(end)) = (json_start, json_end) {
             let json_str = &response[start..=end];
             if let Ok(report) = serde_json::from_str::<DefenseReport>(json_str) {
@@ -137,7 +141,11 @@ Focus on actionable, specific mitigations. Prioritize by severity."#,
 
         // Fallback: generate basic report from raw response
         Ok(DefenseReport {
-            summary: format!("Analysis of {} findings from {}", findings.findings.len(), findings.tool),
+            summary: format!(
+                "Analysis of {} findings from {}",
+                findings.findings.len(),
+                findings.tool
+            ),
             recommendations: vec![Recommendation {
                 priority: 1,
                 title: "AI Analysis".to_string(),
@@ -184,7 +192,10 @@ pub struct TrafficDecision {
 
 impl DefenseAdvisor {
     /// Analyze a batch of traffic packets and return access control decisions
-    pub async fn analyze_traffic_batch(&self, packets: &[TrafficPacket]) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn analyze_traffic_batch(
+        &self,
+        packets: &[TrafficPacket],
+    ) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
         if packets.is_empty() {
             return Ok(vec![]);
         }
@@ -196,8 +207,9 @@ impl DefenseAdvisor {
 
     fn build_traffic_prompt(&self, packets: &[TrafficPacket]) -> String {
         let packets_json = serde_json::to_string_pretty(packets).unwrap_or_default();
-        
-        format!(r#"You are an automated network security analyst (Traffic Guard). Analyze this batch of network packets for malicious activity.
+
+        format!(
+            r#"You are an automated network security analyst (Traffic Guard). Analyze this batch of network packets for malicious activity.
 
 ## Traffic Batch
 ```json
@@ -221,14 +233,19 @@ Return a JSON array of decisions. Do NOT explain outside JSON.
     "reason": "Repeated connection attempts to diverse ports (Scanning)"
   }}
 ]
-```"#, packets_json)
+```"#,
+            packets_json
+        )
     }
 
-    fn parse_traffic_response(&self, response: &str) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_traffic_response(
+        &self,
+        response: &str,
+    ) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
         // Try to extract JSON from response
         let json_start = response.find('[');
         let json_end = response.rfind(']');
-        
+
         if let (Some(start), Some(end)) = (json_start, json_end) {
             let json_str = &response[start..=end];
             if let Ok(decisions) = serde_json::from_str::<Vec<TrafficDecision>>(json_str) {
@@ -238,7 +255,10 @@ Return a JSON array of decisions. Do NOT explain outside JSON.
 
         // Failure fallback - safe fail (allow all but log error)
         // In a real system we might block-all on failure if paranoid
-        eprintln!("Failed to parse AI Traffic decision. Raw response: {}", response);
+        eprintln!(
+            "Failed to parse AI Traffic decision. Raw response: {}",
+            response
+        );
         Ok(vec![])
     }
 }

@@ -24,7 +24,10 @@ pub enum ThreatLevel {
 impl Default for NeuralBus {
     fn default() -> Self {
         Self {
-            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            last_updated: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             threat_level: ThreatLevel::Safe,
             active_threats: 0,
             impacted_lanes: vec![],
@@ -64,7 +67,10 @@ impl NeuralBus {
         };
 
         let bus = Self {
-            last_updated: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            last_updated: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             threat_level: level,
             active_threats: threats,
             impacted_lanes: lanes,

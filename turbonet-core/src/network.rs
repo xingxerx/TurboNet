@@ -1,4 +1,4 @@
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 use tokio::net::UdpSocket;
 
 use std::process::Command;
@@ -37,7 +37,7 @@ fn _get_wifi_ip() -> Option<String> {
 }
 
 // Design Pattern: Explicit Hardware Binding
-// Chosen to bypass OS routing logic entirely and ensure 
+// Chosen to bypass OS routing logic entirely and ensure
 // fragments physically traverse the prioritized Wi-Fi radio.
 
 /// Heartbeat check for Ethernet lane (ASUS router gateway)

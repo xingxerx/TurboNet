@@ -1,17 +1,17 @@
 //! TurboNet Unified CLI Orchestrator
-//! 
+//!
 //! Single entry point to run all TurboNet security tools with AI-driven defense.
-//! 
+//!
 //! Usage:
 //!     cargo run -p turbonet-core --bin turbonet -- help
 //!     cargo run -p turbonet-core --bin turbonet -- defend --input scan.json
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use turbonet_core::ai_defense::{DefenseAdvisor, ScanFindings, Finding, Severity};
-use turbonet_core::ai_client::{AiClient, parse_model_spec};
-use turbonet_core::world_gen::WorldGenerator;
-use turbonet_core::brain::{Brain, Intent}; // Import Brain
+use turbonet_core::ai_client::{parse_model_spec, AiClient};
+use turbonet_core::ai_defense::{DefenseAdvisor, Finding, ScanFindings, Severity};
+use turbonet_core::brain::{Brain, Intent};
+use turbonet_core::world_gen::WorldGenerator; // Import Brain
 
 #[derive(Parser)]
 #[command(name = "turbonet")]
@@ -57,7 +57,6 @@ enum Commands {
         /// Enable NVIDIA GPU Acceleration for Chaos Theory (requires CUDA)
         #[arg(long)]
         nvidia: bool,
-
     },
 
     /// Run Physics Simulation (Spectre + Rapier3D)
@@ -172,7 +171,7 @@ enum GuardAction {
         port: u16,
         #[arg(long, default_value = "ollama:gpt-oss")]
         model: String,
-    }
+    },
 }
 
 #[tokio::main]
@@ -193,19 +192,21 @@ async fn run_interactive_mode() -> Result<(), Box<dyn std::error::Error>> {
     println!("Type 'help' for commands, 'exit' to quit.");
 
     let mut rl = rustyline::DefaultEditor::new()?;
-    
+
     loop {
         let readline = rl.readline("turbonet> ");
         match readline {
             Ok(line) => {
                 let line = line.trim();
-                if line.is_empty() { continue; }
+                if line.is_empty() {
+                    continue;
+                }
                 if line.eq_ignore_ascii_case("exit") || line.eq_ignore_ascii_case("quit") {
                     break;
                 }
-                
+
                 let _ = rl.add_history_entry(line);
-                
+
                 let args = match shlex::split(line) {
                     Some(a) => a,
                     None => {
@@ -213,32 +214,32 @@ async fn run_interactive_mode() -> Result<(), Box<dyn std::error::Error>> {
                         continue;
                     }
                 };
-                
+
                 let mut full_args = vec!["turbonet".to_string()];
                 full_args.extend(args);
 
                 match Cli::try_parse_from(full_args) {
                     Ok(cli) => {
                         if let Err(e) = process_command(cli.command).await {
-                             eprintln!("Error: {}", e);
+                            eprintln!("Error: {}", e);
                         }
-                    },
+                    }
                     Err(e) => {
-                       let _ = e.print();
+                        let _ = e.print();
                     }
                 }
-            },
+            }
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 println!("CTRL-C");
-                break
-            },
+                break;
+            }
             Err(rustyline::error::ReadlineError::Eof) => {
                 println!("CTRL-D");
-                break
-            },
+                break;
+            }
             Err(err) => {
                 eprintln!("Error: {:?}", err);
-                break
+                break;
             }
         }
     }
@@ -247,83 +248,125 @@ async fn run_interactive_mode() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn process_command(command: Commands) -> Result<(), Box<dyn std::error::Error>> {
     match command {
-        Commands::Defend { input, demo, model, format } => {
+        Commands::Defend {
+            input,
+            demo,
+            model,
+            format,
+        } => {
             run_defense_advisor(input, demo, &model, &format).await?;
         }
-        Commands::World { model, theme, nvidia } => {
+        Commands::World {
+            model,
+            theme,
+            nvidia,
+        } => {
             run_world_generator(&model, &theme, nvidia).await?;
         }
         Commands::Scan { target, ports } => {
             println!("🔍 Scanning {} ports {}...", target, ports);
-            println!("   → Run: cargo run -p tools --bin net-sniffer -- scan {}", target);
+            println!(
+                "   → Run: cargo run -p tools --bin net-sniffer -- scan {}",
+                target
+            );
         }
         Commands::Simulate { batch_size, steps } => {
             run_simulation(batch_size, steps).await?;
         }
-        Commands::Spectre { action } => {
-            match action {
-                SpectreAction::Mutate { input, output } => {
-                    let out = output.unwrap_or_else(|| input.with_extension("mutated.bin"));
-                    println!("🦠 Spectre Mutate: {:?} → {:?}", input, out);
-                    println!("   → Run: cargo run -p spectre -- mutate --input {:?}", input);
-                }
-                SpectreAction::Quantum { algorithm, key_size } => {
-                    println!("⚛️ Quantum Threat Analysis: {} @ {} bits", algorithm, key_size);
-                    println!("   → Run: python py_src/quantum_engine.py --algorithm {} --key-size {}", algorithm, key_size);
-                }
-                SpectreAction::Entropy { input } => {
-                    println!("📊 Entropy Analysis: {:?}", input);
-                    println!("   → Run: cargo run -p spectre -- entropy --input {:?}", input);
-                }
+        Commands::Spectre { action } => match action {
+            SpectreAction::Mutate { input, output } => {
+                let out = output.unwrap_or_else(|| input.with_extension("mutated.bin"));
+                println!("🦠 Spectre Mutate: {:?} → {:?}", input, out);
+                println!(
+                    "   → Run: cargo run -p spectre -- mutate --input {:?}",
+                    input
+                );
             }
-        }
-        Commands::Sentinel { action } => {
-            match action {
-                SentinelAction::Memscan { pid } => {
-                    let target = pid.map(|p| format!("PID {}", p)).unwrap_or("all processes".to_string());
-                    println!("🛡️ Memory Scan: {}", target);
-                    println!("   → Run: cargo run -p sentinel --bin sentinel-memscan -- --list");
-                }
-                SentinelAction::Hooks => {
-                    println!("🪝 Hook Detection");
-                    println!("   → Run: cargo run -p sentinel --bin hook-detector");
-                }
-                SentinelAction::Tokens => {
-                    println!("🎫 Token Enumeration");
-                    println!("   → Run: cargo run -p sentinel --bin token-steal");
-                }
+            SpectreAction::Quantum {
+                algorithm,
+                key_size,
+            } => {
+                println!(
+                    "⚛️ Quantum Threat Analysis: {} @ {} bits",
+                    algorithm, key_size
+                );
+                println!(
+                    "   → Run: python py_src/quantum_engine.py --algorithm {} --key-size {}",
+                    algorithm, key_size
+                );
             }
-        }
+            SpectreAction::Entropy { input } => {
+                println!("📊 Entropy Analysis: {:?}", input);
+                println!(
+                    "   → Run: cargo run -p spectre -- entropy --input {:?}",
+                    input
+                );
+            }
+        },
+        Commands::Sentinel { action } => match action {
+            SentinelAction::Memscan { pid } => {
+                let target = pid
+                    .map(|p| format!("PID {}", p))
+                    .unwrap_or("all processes".to_string());
+                println!("🛡️ Memory Scan: {}", target);
+                println!("   → Run: cargo run -p sentinel --bin sentinel-memscan -- --list");
+            }
+            SentinelAction::Hooks => {
+                println!("🪝 Hook Detection");
+                println!("   → Run: cargo run -p sentinel --bin hook-detector");
+            }
+            SentinelAction::Tokens => {
+                println!("🎫 Token Enumeration");
+                println!("   → Run: cargo run -p sentinel --bin token-steal");
+            }
+        },
         Commands::List => {
             print_tool_list();
         }
         Commands::Info => {
             print_system_info();
         }
-        Commands::Guard { interface: _interface, model, action, .. } => {
+        Commands::Guard {
+            interface: _interface,
+            model,
+            action,
+            ..
+        } => {
             match action {
                 GuardAction::Start { port, .. } => {
-                     println!("🛡️ Starting AI Traffic Guard...");
-                     let port_str = port.to_string();
-                     let args = vec!["run", "-p", "tools", "--bin", "net-guard", "--", "--run", &port_str, &model];
-                     println!("   → Run: cargo {}", args.join(" "));
-                    
-                    // In a real CLI we might spawn this directly, but for now we print the command 
+                    println!("🛡️ Starting AI Traffic Guard...");
+                    let port_str = port.to_string();
+                    let args = vec![
+                        "run",
+                        "-p",
+                        "tools",
+                        "--bin",
+                        "net-guard",
+                        "--",
+                        "--run",
+                        &port_str,
+                        &model,
+                    ];
+                    println!("   → Run: cargo {}", args.join(" "));
+
+                    // In a real CLI we might spawn this directly, but for now we print the command
                     // consistent with other tools in this CLIwrapper.
                     // However, let's actually run it for the user if they want interactive mode.
                     use std::process::Command;
-                    
-                    let status = Command::new("cargo")
-                        .args(&args)
-                        .status()?;
-                        
+
+                    let status = Command::new("cargo").args(&args).status()?;
+
                     if !status.success() {
                         eprintln!("Guard process exited with error");
                     }
                 }
             }
         }
-        Commands::Brain { query, model, force } => {
+        Commands::Brain {
+            query,
+            model,
+            force,
+        } => {
             let query_str = query.join(" ");
             run_brain_mode(&query_str, &model, force).await?;
         }
@@ -467,18 +510,22 @@ async fn run_simulation(batch_size: usize, steps: usize) -> Result<(), Box<dyn s
     println!("🧪 Running Physics Simulation (Spectre + Rapier3D)");
     println!("   • Batch Size: {}", batch_size);
     println!("   • Steps: {}", steps);
-    
+
     // For now, just a placeholder or basic loop
     // In a real implementation we would initialize PhysicsWorld here
     println!("   (Simulation logic would run here)");
-    
+
     Ok(())
 }
 
-async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_world_generator(
+    model: &str,
+    theme: &str,
+    use_nvidia: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("🌍 TurboNet Infinite World Generator");
     println!("Theme: {}", theme);
-    
+
     // Select model logic
     let mut selected_model = model.to_string();
     if use_nvidia && model == "ollama:gpt-oss" {
@@ -517,34 +564,38 @@ async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Resu
         }
         Err(e) => {
             let err_msg = e.to_string();
-            if err_msg.contains("connection refused") || err_msg.contains("target machine actively refused") {
-                 eprintln!("\n❌ Connection Failed: Could not connect to the AI engine.");
-                 eprintln!("   Please ensure Ollama is running (e.g., `ollama serve`).");
+            if err_msg.contains("connection refused")
+                || err_msg.contains("target machine actively refused")
+            {
+                eprintln!("\n❌ Connection Failed: Could not connect to the AI engine.");
+                eprintln!("   Please ensure Ollama is running (e.g., `ollama serve`).");
             } else if err_msg.contains("404") || err_msg.contains("not found") {
-                 eprintln!("\n❌ Model Missing: The AI model could not be found.");
-                 eprintln!("   Please run: `ollama pull deepseek-coder`");
-                 eprintln!("   (Or specify a different model with --model)");
+                eprintln!("\n❌ Model Missing: The AI model could not be found.");
+                eprintln!("   Please run: `ollama pull deepseek-coder`");
+                eprintln!("   (Or specify a different model with --model)");
             } else {
-                 eprintln!("Error initializing world: {}", e);
+                eprintln!("Error initializing world: {}", e);
             }
             return Ok(());
         }
     }
 
     let mut rl = rustyline::DefaultEditor::new()?;
-    
+
     loop {
         let readline = rl.readline("\n> ");
         match readline {
             Ok(line) => {
                 let action = line.trim();
-                if action.is_empty() { continue; }
+                if action.is_empty() {
+                    continue;
+                }
                 if action.eq_ignore_ascii_case("exit") || action.eq_ignore_ascii_case("quit") {
                     break;
                 }
-                
+
                 let _ = rl.add_history_entry(action);
-                
+
                 println!("Thinking...");
                 match world.next_turn(action).await {
                     Ok(response) => {
@@ -552,7 +603,7 @@ async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Resu
                     }
                     Err(e) => eprintln!("Error: {}", e),
                 }
-            },
+            }
             Err(_) => break,
         }
     }
@@ -560,7 +611,8 @@ async fn run_world_generator(model: &str, theme: &str, use_nvidia: bool) -> Resu
 }
 
 fn print_tool_list() {
-    println!(r#"
+    println!(
+        r#"
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    🚀 TURBONET TOOLKIT                           ║
 ╠══════════════════════════════════════════════════════════════════╣
@@ -595,7 +647,8 @@ fn print_tool_list() {
 ║  WORLD GEN                                                       ║
 ║    turbonet world     Infinite Procedural World Generator        ║
 ╚══════════════════════════════════════════════════════════════════╝
-"#);
+"#
+    );
 }
 
 fn print_system_info() {
@@ -629,7 +682,7 @@ async fn run_brain_mode(
 
     let brain = Brain::new(Some(model.to_string()));
     let intent = brain.perceive(query).await?;
-    
+
     // In a real agentic loop, we would act on the intent here.
     // For now, we delegate to the Brain to tell us what it WOULD do.
     let plan = brain.process_intent(intent.clone());
@@ -641,20 +694,20 @@ async fn run_brain_mode(
         // Here we would actually call the sub-functions (run_scan, etc.)
         // This connects the specific "section that is needed".
         match intent {
-             Intent::Scan { target, ports } => {
-                 // Call the existing logic
-                 println!("   [Firing Network Scanner]");
-                 println!("🔍 Scanning {} ports {}...", target, ports);
-             }
-             Intent::Defend { input: _ } => {
-                 println!("   [Firing Defense Advisor]");
-                 // In real impl, we would need the input path
-             }
-             Intent::World { theme } => {
-                 println!("   [Firing World Gen]");
-                 run_world_generator(model, &theme, false).await?;
-             }
-             _ => {}
+            Intent::Scan { target, ports } => {
+                // Call the existing logic
+                println!("   [Firing Network Scanner]");
+                println!("🔍 Scanning {} ports {}...", target, ports);
+            }
+            Intent::Defend { input: _ } => {
+                println!("   [Firing Defense Advisor]");
+                // In real impl, we would need the input path
+            }
+            Intent::World { theme } => {
+                println!("   [Firing World Gen]");
+                run_world_generator(model, &theme, false).await?;
+            }
+            _ => {}
         }
     } else {
         println!("\n(Run with --force to execute automatically)");
@@ -662,4 +715,3 @@ async fn run_brain_mode(
 
     Ok(())
 }
-

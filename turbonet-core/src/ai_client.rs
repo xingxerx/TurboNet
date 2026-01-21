@@ -55,7 +55,10 @@ impl AiClient {
     }
 
     /// Send a prompt to the LLM and get a text response
-    pub async fn generate(&self, prompt: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn generate(
+        &self,
+        prompt: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         #[derive(Serialize)]
         struct OllamaRequest<'a> {
             model: &'a str,
@@ -67,12 +70,12 @@ impl AiClient {
         struct OllamaResponse {
             response: String,
         }
-        
+
         // TODO: Support OpenAI Chat Completion format properly if provider is openai
-        // For now, this implementation is heavily biased towards Ollama's /api/generate 
+        // For now, this implementation is heavily biased towards Ollama's /api/generate
         // We really should differentiate based on provider, but the original code was simple.
         // Let's stick to the original logic for now but encapsulate it.
-        
+
         let request = OllamaRequest {
             model: &self.model,
             prompt,
@@ -80,15 +83,12 @@ impl AiClient {
         };
 
         let mut req_builder = self.client.post(&self.api_url);
-        
+
         if let Some(key) = &self.api_key {
             req_builder = req_builder.header("Authorization", format!("Bearer {}", key));
         }
 
-        let response = req_builder
-            .json(&request)
-            .send()
-            .await?;
+        let response = req_builder.json(&request).send().await?;
 
         if !response.status().is_success() {
             let status = response.status();

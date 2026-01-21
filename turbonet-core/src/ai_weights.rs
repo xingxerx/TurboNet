@@ -17,7 +17,7 @@ impl LaneWeights {
     pub fn as_array(&self) -> [u64; 3] {
         [self.w0, self.w1, self.w2]
     }
-    
+
     /// Validate weights sum to 100 and meet minimum thresholds
     pub fn validate(&self) -> Result<(), &'static str> {
         let total = self.w0 + self.w1 + self.w2;
@@ -50,26 +50,24 @@ impl HeuristicPredictor {
             prev_weights: None,
         }
     }
-    
+
     /// Predict optimal weights based on RTT measurements
     /// Lower RTT = higher weight allocation
     pub fn predict(&mut self, rtt_ms: [f64; 3], _loss_pct: [f64; 3]) -> LaneWeights {
         // Inverse RTT scoring (avoid division by zero)
-        let scores: Vec<f64> = rtt_ms.iter()
-            .map(|r| 1.0 / r.max(0.001))
-            .collect();
+        let scores: Vec<f64> = rtt_ms.iter().map(|r| 1.0 / r.max(0.001)).collect();
         let sum: f64 = scores.iter().sum();
-        
+
         // Raw weights from scores
         let raw_w0 = ((scores[0] / sum) * 100.0).round() as u64;
         let raw_w1 = ((scores[1] / sum) * 100.0).round() as u64;
         let raw_w2 = 100 - raw_w0 - raw_w1;
-        
+
         // Apply minimum threshold (5% per lane)
         let (w0, w1, w2) = enforce_minimums(raw_w0, raw_w1, raw_w2);
-        
+
         let new_weights = LaneWeights { w0, w1, w2 };
-        
+
         // Apply exponential smoothing if we have previous weights
         let smoothed = if let Some(prev) = self.prev_weights {
             LaneWeights {
@@ -80,7 +78,7 @@ impl HeuristicPredictor {
         } else {
             new_weights
         };
-        
+
         // Normalize to ensure sum is exactly 100
         let normalized = normalize_weights(smoothed);
         self.prev_weights = Some(normalized);
@@ -109,7 +107,7 @@ impl OnnxPredictor {
             .commit_from_file(model_path)?;
         Ok(Self { session })
     }
-    
+
     /// Load model from embedded bytes
     pub fn from_bytes(model_bytes: &[u8]) -> Result<Self, Box<dyn Error>> {
         let session = ort::Session::builder()?
@@ -117,26 +115,34 @@ impl OnnxPredictor {
             .commit_from_memory(model_bytes)?;
         Ok(Self { session })
     }
-    
+
     /// Predict weights with ~50µs latency
-    pub fn predict(&self, rtt_ms: [f32; 3], loss_pct: [f32; 3]) -> Result<LaneWeights, Box<dyn Error>> {
+    pub fn predict(
+        &self,
+        rtt_ms: [f32; 3],
+        loss_pct: [f32; 3],
+    ) -> Result<LaneWeights, Box<dyn Error>> {
         use ndarray::Array2;
-        
+
         // Prepare input: [batch=1, features=6]
         let input_data = vec![
-            rtt_ms[0], rtt_ms[1], rtt_ms[2],
-            loss_pct[0], loss_pct[1], loss_pct[2],
+            rtt_ms[0],
+            rtt_ms[1],
+            rtt_ms[2],
+            loss_pct[0],
+            loss_pct[1],
+            loss_pct[2],
         ];
         let input = Array2::from_shape_vec((1, 6), input_data)?;
-        
+
         let outputs = self.session.run(ort::inputs!["input" => input.view()]?)?;
         let output = outputs["output"].try_extract_tensor::<f32>()?;
-        
+
         // Output: [w0, w1, w2] (already normalized by model)
         let w0 = (output[[0, 0]] * 100.0).round() as u64;
         let w1 = (output[[0, 1]] * 100.0).round() as u64;
         let w2 = 100 - w0 - w1;
-        
+
         let (w0, w1, w2) = enforce_minimums(w0, w1, w2);
         Ok(LaneWeights { w0, w1, w2 })
     }
@@ -157,7 +163,7 @@ impl AdaptivePredictor {
             heuristic: HeuristicPredictor::new(),
         }
     }
-    
+
     /// Try to load ONNX model
     #[cfg(feature = "onnx")]
     pub fn with_onnx_model(mut self, model_path: &str) -> Self {
@@ -172,7 +178,7 @@ impl AdaptivePredictor {
         }
         self
     }
-    
+
     /// Predict using best available method
     pub fn predict(&mut self, rtt_ms: [f64; 3], loss_pct: [f64; 3]) -> LaneWeights {
         #[cfg(feature = "onnx")]
@@ -183,7 +189,7 @@ impl AdaptivePredictor {
                 return weights;
             }
         }
-        
+
         // Fallback to heuristic
         self.heuristic.predict(rtt_ms, loss_pct)
     }
@@ -200,17 +206,22 @@ impl Default for AdaptivePredictor {
 fn enforce_minimums(w0: u64, w1: u64, w2: u64) -> (u64, u64, u64) {
     const MIN: u64 = 5;
     let mut weights = [w0.max(MIN), w1.max(MIN), w2.max(MIN)];
-    
+
     // Normalize if over 100
     let sum: u64 = weights.iter().sum();
     if sum > 100 {
         let excess = sum - 100;
         // Take from the largest weight
-        if let Some(max_idx) = weights.iter().enumerate().max_by_key(|(_, &v)| v).map(|(i, _)| i) {
+        if let Some(max_idx) = weights
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, &v)| v)
+            .map(|(i, _)| i)
+        {
             weights[max_idx] = weights[max_idx].saturating_sub(excess);
         }
     }
-    
+
     (weights[0], weights[1], weights[2])
 }
 
@@ -224,14 +235,19 @@ fn normalize_weights(weights: LaneWeights) -> LaneWeights {
     if sum == 100 {
         return weights;
     }
-    
+
     let diff = 100i64 - sum as i64;
     // Adjust the largest weight
     let mut arr = [weights.w0, weights.w1, weights.w2];
-    if let Some(max_idx) = arr.iter().enumerate().max_by_key(|(_, &v)| v).map(|(i, _)| i) {
+    if let Some(max_idx) = arr
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, &v)| v)
+        .map(|(i, _)| i)
+    {
         arr[max_idx] = (arr[max_idx] as i64 + diff) as u64;
     }
-    
+
     LaneWeights {
         w0: arr[0],
         w1: arr[1],

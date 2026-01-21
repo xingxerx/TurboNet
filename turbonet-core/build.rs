@@ -1,4 +1,3 @@
-
 fn main() {
     println!("cargo:rerun-if-changed=shredder.cu");
     println!("cargo:rerun-if-changed=spectre.cu");
@@ -12,12 +11,11 @@ fn main() {
     // Skip CUDA build if PTX files already exist (pre-compiled)
     let shredder_exists = std::path::Path::new("shredder.ptx").exists();
     let spectre_exists = std::path::Path::new("spectre.ptx").exists();
-    
+
     if shredder_exists && spectre_exists {
         // Both already compiled
         return;
     }
-
 
     // Compile shredder.cu to shredder.ptx using nvcc
     // On Windows, check if cl.exe is in PATH before running nvcc
@@ -29,9 +27,11 @@ fn main() {
             .output()
             .expect("Failed to check for cl.exe");
         if !cl_check.status.success() {
-            eprintln!("\nERROR: Microsoft Visual C++ compiler (cl.exe) not found in PATH.\n\
+            eprintln!(
+                "\nERROR: Microsoft Visual C++ compiler (cl.exe) not found in PATH.\n\
 Please open an 'x64 Native Tools Command Prompt for VS' and run 'cargo build' from there.\n\
-See CUDA_BUILD_WINDOWS.md for details.\n");
+See CUDA_BUILD_WINDOWS.md for details.\n"
+            );
             std::process::exit(1);
         }
     }
@@ -44,9 +44,11 @@ See CUDA_BUILD_WINDOWS.md for details.\n");
             .output()
             .expect("Failed to check for nvcc");
         if !nvcc_check.status.success() {
-            eprintln!("\nERROR: CUDA compiler (nvcc) not found in PATH.\n\
+            eprintln!(
+                "\nERROR: CUDA compiler (nvcc) not found in PATH.\n\
 Please install the CUDA Toolkit and ensure nvcc is available.\n\
-See CUDA_BUILD_LINUX_MAC.md for details.\n");
+See CUDA_BUILD_LINUX_MAC.md for details.\n"
+            );
             std::process::exit(1);
         }
     }
@@ -61,7 +63,7 @@ See CUDA_BUILD_LINUX_MAC.md for details.\n");
             panic!("nvcc failed for shredder.cu with status: {}", status);
         }
     }
-    
+
     if !spectre_exists {
         let status = std::process::Command::new("nvcc")
             .args(["-ptx", "spectre.cu", "-o", "spectre.ptx"])

@@ -41,35 +41,45 @@ impl SpectreEngine {
     /// Initialize the SPECTRE-GPU engine
     pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let device = CudaDevice::new(0)?;
-        
+
         // Load the SPECTRE PTX module
         let ptx = std::fs::read_to_string("spectre.ptx")
             .map_err(|_| "spectre.ptx not found - run cargo build first")?;
-        device.load_ptx(ptx.into(), "spectre", &[
-            "spectre_mutate_kernel",
-            "spectre_find_best_kernel",
-            "spectre_decode_kernel",
-            "terrain_gen_kernel",
-        ])?;
-        
+        device.load_ptx(
+            ptx.into(),
+            "spectre",
+            &[
+                "spectre_mutate_kernel",
+                "spectre_find_best_kernel",
+                "spectre_decode_kernel",
+                "terrain_gen_kernel",
+            ],
+        )?;
+
         Ok(Self { device })
     }
-    
+
     /// Initialize from existing device (reuse TurboNet's CUDA context)
-    pub fn from_device(device: Arc<CudaDevice>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn from_device(
+        device: Arc<CudaDevice>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // Load the SPECTRE PTX module
         let ptx = std::fs::read_to_string("spectre.ptx")
             .map_err(|_| "spectre.ptx not found - run cargo build first")?;
-        device.load_ptx(ptx.into(), "spectre", &[
-            "spectre_mutate_kernel",
-            "spectre_find_best_kernel",
-            "spectre_decode_kernel",
-            "terrain_gen_kernel",
-        ])?;
-        
+        device.load_ptx(
+            ptx.into(),
+            "spectre",
+            &[
+                "spectre_mutate_kernel",
+                "spectre_find_best_kernel",
+                "spectre_decode_kernel",
+                "terrain_gen_kernel",
+            ],
+        )?;
+
         Ok(Self { device })
     }
-    
+
     /// Generate polymorphic payload variants on GPU
     ///
     /// # Arguments
@@ -89,37 +99,41 @@ impl SpectreEngine {
     ) -> Result<MutationResult, Box<dyn std::error::Error + Send + Sync>> {
         let len = payload.len();
         let num_variants = num_variants as usize;
-        
+
         // Copy input to GPU
         let d_input = self.device.htod_copy(payload.to_vec())?;
-        
+
         // Allocate output buffer for all variants
         let mut d_output: CudaSlice<u8> = self.device.alloc_zeros(len * num_variants)?;
-        
+
         // Allocate entropy scores
         let mut d_entropies: CudaSlice<f32> = self.device.alloc_zeros(num_variants)?;
-        
+
         // Launch mutation kernel
         let cfg = LaunchConfig::for_num_elems(num_variants as u32);
-        let mutate_func = self.device
+        let mutate_func = self
+            .device
             .get_func("spectre", "spectre_mutate_kernel")
             .expect("spectre_mutate_kernel not found");
-        
+
         unsafe {
-            mutate_func.launch(cfg, (
-                &d_input,
-                &mut d_output,
-                &mut d_entropies,
-                len as i32,
-                salt,
-                num_variants as i32,
-                mode as i32,
-            ))?;
+            mutate_func.launch(
+                cfg,
+                (
+                    &d_input,
+                    &mut d_output,
+                    &mut d_entropies,
+                    len as i32,
+                    salt,
+                    num_variants as i32,
+                    mode as i32,
+                ),
+            )?;
         }
-        
+
         // Copy entropies back to find best variant
         let entropies = self.device.dtoh_sync_copy(&d_entropies)?;
-        
+
         // Find highest entropy variant (CPU-side for simplicity)
         let (best_idx, best_entropy) = entropies
             .iter()
@@ -127,13 +141,13 @@ impl SpectreEngine {
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .map(|(i, &e)| (i, e))
             .unwrap_or((0, 0.0));
-        
+
         // Copy the best variant's output
         let all_outputs = self.device.dtoh_sync_copy(&d_output)?;
         let start = best_idx * len;
         let end = start + len;
         let best_payload = all_outputs[start..end].to_vec();
-        
+
         Ok(MutationResult {
             payload: best_payload,
             entropy: best_entropy,
@@ -141,27 +155,27 @@ impl SpectreEngine {
             mode,
         })
     }
-    
+
     /// CPU fallback for entropy calculation (when CUDA unavailable)
     pub fn calculate_entropy_cpu(data: &[u8]) -> f32 {
         let mut counts = [0u32; 256];
         for &byte in data {
             counts[byte as usize] += 1;
         }
-        
+
         let len = data.len() as f32;
         let mut entropy = 0.0f32;
-        
+
         for &count in &counts {
             if count > 0 {
                 let p = count as f32 / len;
                 entropy -= p * p.log2();
             }
         }
-        
+
         entropy
     }
-    
+
     /// Decode a mutated payload back to original
     ///
     /// Only works for XOR and CASCADE modes (reversible)
@@ -175,33 +189,36 @@ impl SpectreEngine {
         if mode != MutationMode::Xor && mode != MutationMode::Cascade {
             return Err("Only XOR and CASCADE modes are reversible".into());
         }
-        
+
         let len = mutated.len();
-        
+
         // Copy input to GPU
         let d_input = self.device.htod_copy(mutated.to_vec())?;
         let mut d_output: CudaSlice<u8> = self.device.alloc_zeros(len)?;
-        
+
         // Launch decode kernel
         let cfg = LaunchConfig::for_num_elems(len as u32);
-        let decode_func = self.device
+        let decode_func = self
+            .device
             .get_func("spectre", "spectre_decode_kernel")
             .expect("spectre_decode_kernel not found");
-        
+
         unsafe {
-            decode_func.launch(cfg, (
-                &d_input,
-                &mut d_output,
-                len as i32,
-                salt,
-                variant_index as i32,
-                mode as i32,
-            ))?;
+            decode_func.launch(
+                cfg,
+                (
+                    &d_input,
+                    &mut d_output,
+                    len as i32,
+                    salt,
+                    variant_index as i32,
+                    mode as i32,
+                ),
+            )?;
         }
-        
+
         Ok(self.device.dtoh_sync_copy(&d_output)?)
     }
-
 
     /// Generate a batch of procedural terrain heightmaps on the GPU
     ///
@@ -222,7 +239,7 @@ impl SpectreEngine {
         master_seed: u64,
     ) -> Result<Vec<f32>, Box<dyn std::error::Error + Send + Sync>> {
         let total_pixels = width * height * num_worlds;
-        
+
         // 1. Generate seeds for each world
         use std::hash::{Hash, Hasher};
         let mut seeds = Vec::with_capacity(num_worlds);
@@ -232,28 +249,33 @@ impl SpectreEngine {
             i.hash(&mut hasher);
             seeds.push(hasher.finish());
         }
-        
+
         // 2. Upload seeds to GPU
         let d_seeds = self.device.htod_copy(seeds)?;
-        
+
         // 3. Allocate output buffer
         let mut d_heightmaps: CudaSlice<f32> = self.device.alloc_zeros(total_pixels)?;
-        
+
         // 4. Launch Kernel
         let cfg = LaunchConfig::for_num_elems(total_pixels as u32);
-        let gen_func = self.device.get_func("spectre", "terrain_gen_kernel")
+        let gen_func = self
+            .device
+            .get_func("spectre", "terrain_gen_kernel")
             .ok_or("terrain_gen_kernel not found on GPU")?;
-            
+
         unsafe {
-            gen_func.launch(cfg, (
-                &mut d_heightmaps,
-                width as i32,
-                height as i32,
-                num_worlds as i32,
-                &d_seeds
-            ))?;
+            gen_func.launch(
+                cfg,
+                (
+                    &mut d_heightmaps,
+                    width as i32,
+                    height as i32,
+                    num_worlds as i32,
+                    &d_seeds,
+                ),
+            )?;
         }
-        
+
         // 5. Read back results
         Ok(self.device.dtoh_sync_copy(&d_heightmaps)?)
     }
@@ -262,14 +284,17 @@ impl SpectreEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_entropy_calculation() {
         // Random-looking data should have high entropy
         let random_ish: Vec<u8> = (0..256).map(|i| i as u8).collect();
         let entropy = SpectreEngine::calculate_entropy_cpu(&random_ish);
-        assert!(entropy > 7.9, "Expected high entropy for uniform distribution");
-        
+        assert!(
+            entropy > 7.9,
+            "Expected high entropy for uniform distribution"
+        );
+
         // Repeated data should have low entropy
         let repeated = vec![0xAA; 256];
         let entropy = SpectreEngine::calculate_entropy_cpu(&repeated);

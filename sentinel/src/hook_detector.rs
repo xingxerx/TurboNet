@@ -6,13 +6,13 @@ use std::env;
 
 #[cfg(windows)]
 mod detector {
+    use std::ffi::c_void;
+    use std::mem;
     use windows::Win32::Foundation::*;
     use windows::Win32::System::Diagnostics::Debug::ReadProcessMemory;
     use windows::Win32::System::Diagnostics::ToolHelp::*;
-    use windows::Win32::System::Threading::*;
     use windows::Win32::System::Memory::*;
-    use std::mem;
-    use std::ffi::c_void;
+    use windows::Win32::System::Threading::*;
 
     pub fn list_processes() {
         unsafe {
@@ -31,7 +31,8 @@ mod detector {
 
             if Process32FirstW(snapshot, &mut entry).is_ok() {
                 loop {
-                    let name: String = entry.szExeFile
+                    let name: String = entry
+                        .szExeFile
                         .iter()
                         .take_while(|&&c| c != 0)
                         .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
@@ -48,7 +49,8 @@ mod detector {
 
     pub fn scan_process(pid: u32) {
         unsafe {
-            let handle = match OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) {
+            let handle = match OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid)
+            {
                 Ok(h) => h,
                 Err(e) => {
                     eprintln!("[!] Failed to open process: {:?}", e);
@@ -82,25 +84,32 @@ mod detector {
                 let is_executable = (protect & 0x10) != 0 || // PAGE_EXECUTE
                                     (protect & 0x20) != 0 || // PAGE_EXECUTE_READ
                                     (protect & 0x40) != 0 || // PAGE_EXECUTE_READWRITE
-                                    (protect & 0x80) != 0;   // PAGE_EXECUTE_WRITECOPY
+                                    (protect & 0x80) != 0; // PAGE_EXECUTE_WRITECOPY
 
                 if mbi.State.0 == MEM_COMMIT.0 && is_executable && mbi.RegionSize > 0 {
                     regions_scanned += 1;
-                    
+
                     // Read first bytes of the region
                     let mut buffer = [0u8; 16];
                     let mut bytes_read = 0;
-                    
+
                     if ReadProcessMemory(
                         handle,
                         mbi.BaseAddress,
                         buffer.as_mut_ptr() as *mut c_void,
                         buffer.len(),
                         Some(&mut bytes_read),
-                    ).is_ok() && bytes_read >= 8 && is_hook_signature(&buffer) {
+                    )
+                    .is_ok()
+                        && bytes_read >= 8
+                        && is_hook_signature(&buffer)
+                    {
                         hooks_found += 1;
-                        println!("[!] Potential hook at 0x{:016X}: {:02X?}", 
-                                    mbi.BaseAddress as usize, &buffer[..8]);
+                        println!(
+                            "[!] Potential hook at 0x{:016X}: {:02X?}",
+                            mbi.BaseAddress as usize,
+                            &buffer[..8]
+                        );
                     }
                 }
 
@@ -112,7 +121,7 @@ mod detector {
 
             println!("\n[*] Scanned {} executable regions", regions_scanned);
             println!("[*] Potential hooks found: {}", hooks_found);
-            
+
             if hooks_found == 0 {
                 println!("[+] No obvious hooks detected");
             } else {
@@ -124,29 +133,42 @@ mod detector {
     }
 
     fn is_hook_signature(bytes: &[u8]) -> bool {
-        if bytes.len() < 2 { return false; }
-        
+        if bytes.len() < 2 {
+            return false;
+        }
+
         // Common hook patterns at function entry:
         // E9 xx xx xx xx - JMP rel32 (5 bytes)
-        // 68 xx xx xx xx C3 - PUSH addr + RET (6 bytes)  
+        // 68 xx xx xx xx C3 - PUSH addr + RET (6 bytes)
         // FF 25 xx xx xx xx - JMP [addr] (6 bytes)
         // Note: We're looking for these at region starts, which is suspicious
-        
+
         // Don't flag normal function prologues (push ebp, etc)
-        if bytes[0] == 0x55 { return false; } // push ebp
-        if bytes[0] == 0x48 && bytes[1] == 0x89 { return false; } // mov [rsp+...], rbx etc
-        
+        if bytes[0] == 0x55 {
+            return false;
+        } // push ebp
+        if bytes[0] == 0x48 && bytes[1] == 0x89 {
+            return false;
+        } // mov [rsp+...], rbx etc
+
         // Flag suspicious patterns
-        if bytes[0] == 0xE9 { return true; }  // JMP rel32
-        if bytes[0] == 0x68 && bytes.len() > 5 && bytes[5] == 0xC3 { return true; }  // PUSH+RET
-        if bytes[0] == 0xFF && bytes[1] == 0x25 { return true; }  // JMP [addr]
-        
+        if bytes[0] == 0xE9 {
+            return true;
+        } // JMP rel32
+        if bytes[0] == 0x68 && bytes.len() > 5 && bytes[5] == 0xC3 {
+            return true;
+        } // PUSH+RET
+        if bytes[0] == 0xFF && bytes[1] == 0x25 {
+            return true;
+        } // JMP [addr]
+
         false
     }
 }
 
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
 ╔═══════════════════════════════════════════════════════════════╗
 ║   ██╗  ██╗ ██████╗  ██████╗ ██╗  ██╗                          ║
 ║   ██║  ██║██╔═══██╗██╔═══██╗██║ ██╔╝                          ║
@@ -156,7 +178,8 @@ fn print_banner() {
 ║   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝                          ║
 ║            DETECTOR - API Hook Scanner v0.1                    ║
 ╚═══════════════════════════════════════════════════════════════╝
-"#);
+"#
+    );
 }
 
 fn print_usage(prog: &str) {
@@ -170,9 +193,9 @@ fn print_usage(prog: &str) {
 
 fn main() {
     print_banner();
-    
+
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         print_usage(&args[0]);
         return;

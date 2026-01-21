@@ -1,5 +1,5 @@
 use crate::ai_client::AiClient;
-use crate::spectre::{SpectreEngine, MutationMode};
+use crate::spectre::{MutationMode, SpectreEngine};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,7 +38,7 @@ impl WorldGenerator {
 
     pub async fn initialize(&mut self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let chaos_prompt = self.inject_chaos().await?;
-        
+
         let prompt = format!(
             "You are a hyper-realistic simulation engine. Theme: '{}'.\n\
             Generate the FIRST scene introduction.\n\
@@ -53,26 +53,43 @@ impl WorldGenerator {
             Focus on sensory details (sight, sound, smell) and physical properties of objects.\n\
             Keep it immersive but concise (under 100 words).\n\
             Do NOT ask the player what to do.",
-            self.theme,
-            chaos_prompt
+            self.theme, chaos_prompt
         );
 
         let response = self.client.generate(&prompt).await?;
         self.state.description = response.trim().to_string();
         self.state.location = "Start".to_string();
-        self.state.history.push(format!("start: {}", self.state.description));
-        
+        self.state
+            .history
+            .push(format!("start: {}", self.state.description));
+
         Ok(self.state.description.clone())
     }
 
-    pub async fn next_turn(&mut self, action: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn next_turn(
+        &mut self,
+        action: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         self.state.turn_count += 1;
-        
+
         // Keep context reasonable
-        let recent_history = self.state.history.iter().rev().take(3).rev().cloned().collect::<Vec<_>>().join("\n");
+        let recent_history = self
+            .state
+            .history
+            .iter()
+            .rev()
+            .take(3)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
         let chaos_prompt = self.inject_chaos().await?;
-        
-        let physics_context = self.state.physics_override.as_deref().unwrap_or("Standard Earth Physics");
+
+        let physics_context = self
+            .state
+            .physics_override
+            .as_deref()
+            .unwrap_or("Standard Earth Physics");
 
         let prompt = format!(
             "You are a hyper-realistic physics and logic engine. Theme: '{}'.\n\
@@ -103,10 +120,10 @@ impl WorldGenerator {
 
         let response = self.client.generate(&prompt).await?;
         let result = response.trim().to_string();
-        
+
         self.state.description = result.clone();
         self.state.history.push(format!("> {}\n{}", action, result));
-        
+
         Ok(result)
     }
 
@@ -121,22 +138,30 @@ impl WorldGenerator {
             // Use current description as seed
             let payload = self.state.description.as_bytes();
             // Generate variants
-            let mutation = engine.generate_polymorphic(
-                payload, 
-                16, // variants
-                self.state.turn_count as u64, // salt
-                MutationMode::Xor
-            ).await?;
-            
+            let mutation = engine
+                .generate_polymorphic(
+                    payload,
+                    16,                           // variants
+                    self.state.turn_count as u64, // salt
+                    MutationMode::Xor,
+                )
+                .await?;
+
             let entropy_level = mutation.entropy; // 0.0 to 8.0
-            
+
             // Interpret entropy as "Environmental Instability"
             if entropy_level > 6.0 {
                 Ok(format!("- WARNING: HIGH ENTROPY DETECTED ({:.2}). The environment is unstable. Strange quantum fluctuations or weather anomalies are occurring.", entropy_level))
             } else if entropy_level > 4.0 {
-                Ok(format!("- NOTICE: Elevated Entropy ({:.2}). Minor physical anomalies present.", entropy_level))
+                Ok(format!(
+                    "- NOTICE: Elevated Entropy ({:.2}). Minor physical anomalies present.",
+                    entropy_level
+                ))
             } else {
-                Ok(format!("- STATUS: Entropy Stable ({:.2}). Physics are nominal.", entropy_level))
+                Ok(format!(
+                    "- STATUS: Entropy Stable ({:.2}). Physics are nominal.",
+                    entropy_level
+                ))
             }
         } else {
             Ok(String::new())

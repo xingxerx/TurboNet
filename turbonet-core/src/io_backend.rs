@@ -1,13 +1,13 @@
 // TurboNet IO Backend Abstraction Layer
 // Provides pluggable socket implementations for different performance tiers
 
+use socket2::{Domain, Socket, Type};
 use std::future::Future;
 use std::io::Result;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
-use socket2::{Socket, Domain, Type};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
 
@@ -15,23 +15,13 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
 /// Implementations can be swapped between standard tokio, io_uring, or DPDK
 pub trait TurboSocket: Send + Sync {
     /// Send data to a target address
-    fn send_to<'a>(
-        &'a self,
-        buf: &'a [u8],
-        target: &'a str,
-    ) -> BoxFuture<'a, usize>;
+    fn send_to<'a>(&'a self, buf: &'a [u8], target: &'a str) -> BoxFuture<'a, usize>;
 
     /// Receive data and return source address
-    fn recv_from<'a>(
-        &'a self,
-        buf: &'a mut [u8],
-    ) -> BoxFuture<'a, (usize, SocketAddr)>;
+    fn recv_from<'a>(&'a self, buf: &'a mut [u8]) -> BoxFuture<'a, (usize, SocketAddr)>;
 
     /// Batch send multiple packets (for high-throughput scenarios)
-    fn batch_send<'a>(
-        &'a self,
-        packets: &'a [(&'a [u8], SocketAddr)],
-    ) -> BoxFuture<'a, usize>;
+    fn batch_send<'a>(&'a self, packets: &'a [(&'a [u8], SocketAddr)]) -> BoxFuture<'a, usize>;
 
     /// Get the local address this socket is bound to
     fn local_addr(&self) -> Result<SocketAddr>;
@@ -49,16 +39,19 @@ impl TokioUdpBackend {
     pub async fn bind(addr: &str) -> Result<Self> {
         let sock = Socket::new(Domain::IPV4, Type::DGRAM, None)?;
         sock.set_reuse_address(true)?;
-        
+
         // Tune for high throughput: 4MB buffers
         sock.set_recv_buffer_size(4 * 1024 * 1024)?;
         sock.set_send_buffer_size(4 * 1024 * 1024)?;
         sock.set_nonblocking(true)?;
-        
-        sock.bind(&addr.parse::<SocketAddr>()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
-            .into())?;
-        
+
+        sock.bind(
+            &addr
+                .parse::<SocketAddr>()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
+                .into(),
+        )?;
+
         let socket = Arc::new(UdpSocket::from_std(sock.into())?);
         Ok(Self { socket })
     }
@@ -70,29 +63,15 @@ impl TokioUdpBackend {
 }
 
 impl TurboSocket for TokioUdpBackend {
-    fn send_to<'a>(
-        &'a self,
-        buf: &'a [u8],
-        target: &'a str,
-    ) -> BoxFuture<'a, usize> {
-        Box::pin(async move {
-            self.socket.send_to(buf, target).await
-        })
+    fn send_to<'a>(&'a self, buf: &'a [u8], target: &'a str) -> BoxFuture<'a, usize> {
+        Box::pin(async move { self.socket.send_to(buf, target).await })
     }
 
-    fn recv_from<'a>(
-        &'a self,
-        buf: &'a mut [u8],
-    ) -> BoxFuture<'a, (usize, SocketAddr)> {
-        Box::pin(async move {
-            self.socket.recv_from(buf).await
-        })
+    fn recv_from<'a>(&'a self, buf: &'a mut [u8]) -> BoxFuture<'a, (usize, SocketAddr)> {
+        Box::pin(async move { self.socket.recv_from(buf).await })
     }
 
-    fn batch_send<'a>(
-        &'a self,
-        packets: &'a [(&'a [u8], SocketAddr)],
-    ) -> BoxFuture<'a, usize> {
+    fn batch_send<'a>(&'a self, packets: &'a [(&'a [u8], SocketAddr)]) -> BoxFuture<'a, usize> {
         Box::pin(async move {
             let mut total = 0;
             for (buf, addr) in packets {
@@ -115,7 +94,7 @@ pub async fn create_optimal_backend(bind_addr: &str) -> Result<Box<dyn TurboSock
     // if io_uring_available() {
     //     return Ok(Box::new(IoUringBackend::bind(bind_addr).await?));
     // }
-    
+
     Ok(Box::new(TokioUdpBackend::bind(bind_addr).await?))
 }
 

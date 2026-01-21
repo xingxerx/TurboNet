@@ -1,5 +1,8 @@
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Key, Nonce,
+};
 use pqc_kyber::encapsulate;
-use aes_gcm::{Aes256Gcm, Key, Nonce, aead::{Aead, KeyInit}};
 use rand::{rngs::OsRng, RngCore};
 use zeroize::Zeroize;
 
@@ -17,13 +20,18 @@ impl EncryptedPayload {
         out.extend_from_slice(&self.ciphertext);
         out
     }
-    
+
     /// Deserialize from bytes
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
-        if data.len() < 12 { return None; }
+        if data.len() < 12 {
+            return None;
+        }
         let mut nonce = [0u8; 12];
         nonce.copy_from_slice(&data[..12]);
-        Some(Self { nonce, ciphertext: data[12..].to_vec() })
+        Some(Self {
+            nonce,
+            ciphertext: data[12..].to_vec(),
+        })
     }
 }
 
@@ -42,9 +50,14 @@ impl QuantumSession {
     pub fn initiate(pk_bytes: &[u8]) -> Result<(Vec<u8>, Self), &'static str> {
         let mut rng = OsRng;
         let (ct, ss) = encapsulate(pk_bytes, &mut rng).map_err(|_| "Encapsulation failed")?;
-        Ok((ct.to_vec(), Self { secret: ss.to_vec() }))
+        Ok((
+            ct.to_vec(),
+            Self {
+                secret: ss.to_vec(),
+            },
+        ))
     }
-    
+
     /// Create session from existing shared secret (for receiver)
     pub fn from_secret(secret: Vec<u8>) -> Self {
         Self { secret }
@@ -55,22 +68,26 @@ impl QuantumSession {
     pub fn encrypt_payload(&self, data: &[u8]) -> EncryptedPayload {
         let key = Key::<Aes256Gcm>::from_slice(&self.secret);
         let cipher = Aes256Gcm::new(key);
-        
+
         // Generate cryptographically secure random nonce
         let mut nonce_bytes = [0u8; 12];
         OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
-        
+
         let ciphertext = cipher.encrypt(nonce, data).expect("Encryption failed");
-        EncryptedPayload { nonce: nonce_bytes, ciphertext }
+        EncryptedPayload {
+            nonce: nonce_bytes,
+            ciphertext,
+        }
     }
-    
+
     /// Decrypts payload using the shared secret
     pub fn decrypt_payload(&self, encrypted: &EncryptedPayload) -> Result<Vec<u8>, &'static str> {
         let key = Key::<Aes256Gcm>::from_slice(&self.secret);
         let cipher = Aes256Gcm::new(key);
         let nonce = Nonce::from_slice(&encrypted.nonce);
-        cipher.decrypt(nonce, encrypted.ciphertext.as_slice())
+        cipher
+            .decrypt(nonce, encrypted.ciphertext.as_slice())
             .map_err(|_| "Decryption failed")
     }
 }

@@ -94,10 +94,15 @@ fn print_usage(prog: &str) {
     println!();
     println!("EXAMPLES:");
     println!("  {} scan", prog);
-    println!("  {} predict --ssid \"ATT123\" --bssid \"00:11:22:33:44:55\"", prog);
+    println!(
+        "  {} predict --ssid \"ATT123\" --bssid \"00:11:22:33:44:55\"",
+        prog
+    );
     println!("  {} hunt --target \"MyNetwork\" --confirm", prog);
     println!();
-    println!("⚠️  LEGAL NOTICE: Only use on networks you own or have written authorization to test.");
+    println!(
+        "⚠️  LEGAL NOTICE: Only use on networks you own or have written authorization to test."
+    );
 }
 
 /// Scan for nearby Wi-Fi networks
@@ -119,7 +124,10 @@ async fn run_scan() -> Result<(), Box<dyn std::error::Error>> {
     println!("╔══════════════════════════════════════════════════════════════════════════════╗");
     println!("║                           DISCOVERED NETWORKS                                ║");
     println!("╠══════════════════════════════════════════════════════════════════════════════╣");
-    println!("║ {:^3} │ {:^24} │ {:^17} │ {:^8} │ {:^8} ║", "#", "SSID", "BSSID", "SIGNAL", "SECURITY");
+    println!(
+        "║ {:^3} │ {:^24} │ {:^17} │ {:^8} │ {:^8} ║",
+        "#", "SSID", "BSSID", "SIGNAL", "SECURITY"
+    );
     println!("╠══════════════════════════════════════════════════════════════════════════════╣");
 
     for (i, net) in networks.iter().enumerate() {
@@ -204,7 +212,10 @@ fn run_predict(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if predictions.len() > 15 {
-        println!("║      ... and {} more predictions                               ║", predictions.len() - 15);
+        println!(
+            "║      ... and {} more predictions                               ║",
+            predictions.len() - 15
+        );
     }
 
     println!("╚══════════════════════════════════════════════════════════════════╝");
@@ -261,11 +272,17 @@ async fn run_hunt(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
     let target = match target {
         Some(t) => {
-            println!("[+] Target found: {} (Signal: {} dBm)", t.ssid, t.signal_strength);
+            println!(
+                "[+] Target found: {} (Signal: {} dBm)",
+                t.ssid, t.signal_strength
+            );
             t.clone()
         }
         None => {
-            println!("[!] Target network '{}' not found in scan results.", target_ssid);
+            println!(
+                "[!] Target network '{}' not found in scan results.",
+                target_ssid
+            );
             println!("[*] Creating synthetic target for demonstration...");
             WifiNetwork {
                 ssid: target_ssid.clone(),
@@ -296,11 +313,17 @@ async fn run_hunt(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                 match attempt_connection_windows(&target.ssid, cookie) {
                     Ok(true) => {
                         println!("\n╔══════════════════════════════════════════════════════════════════╗");
-                        println!("║  ✓ SUCCESS: JAR OPENED!                                          ║");
-                        println!("╠══════════════════════════════════════════════════════════════════╣");
+                        println!(
+                            "║  ✓ SUCCESS: JAR OPENED!                                          ║"
+                        );
+                        println!(
+                            "╠══════════════════════════════════════════════════════════════════╣"
+                        );
                         println!("║  Network:  {:53} ║", target.ssid);
                         println!("║  Cookie:   {:53} ║", cookie);
-                        println!("╚══════════════════════════════════════════════════════════════════╝");
+                        println!(
+                            "╚══════════════════════════════════════════════════════════════════╝"
+                        );
                         return Ok(());
                     }
                     Ok(false) => {
@@ -339,7 +362,11 @@ fn scan_networks() -> Result<Vec<WifiNetwork>, Box<dyn std::error::Error>> {
             let results: Vec<WifiNetwork> = networks
                 .into_iter()
                 .map(|n| WifiNetwork {
-                    ssid: if n.ssid.is_empty() { "<hidden>".to_string() } else { n.ssid },
+                    ssid: if n.ssid.is_empty() {
+                        "<hidden>".to_string()
+                    } else {
+                        n.ssid
+                    },
                     bssid: n.mac.to_string(),
                     signal_strength: n.signal_level.parse().unwrap_or(-100),
                     security: format_security(&n.security),
@@ -429,7 +456,7 @@ fn ask_ai_for_cookies(ssid: &str, bssid: &str) -> Result<Vec<String>, Box<dyn st
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Parse the JSON output (it might have debug lines, find the JSON)
     for line in stdout.lines() {
         if line.starts_with('{') {
@@ -457,12 +484,15 @@ fn get_fallback_predictions(ssid: &str) -> Vec<String> {
 
 /// Attempt Wi-Fi connection on Windows
 #[cfg(windows)]
-fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dyn std::error::Error>> {
+fn attempt_connection_windows(
+    ssid: &str,
+    password: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
     use std::process::Stdio;
 
     // Use netsh to create a temporary profile and connect
     // Note: This is a simplified approach; production would use WlanConnect API
-    
+
     let profile_xml = format!(
         r#"<?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
@@ -498,7 +528,12 @@ fn attempt_connection_windows(ssid: &str, password: &str) -> Result<bool, Box<dy
 
     // Add profile
     let add_result = Command::new("netsh")
-        .args(["wlan", "add", "profile", &format!("filename={}", temp_path.display())])
+        .args([
+            "wlan",
+            "add",
+            "profile",
+            &format!("filename={}", temp_path.display()),
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()?;

@@ -1,5 +1,5 @@
-use rapier3d::prelude::*;
 use nalgebra::Vector3;
+use rapier3d::prelude::*;
 
 pub struct PhysicsWorld {
     rigid_body_set: RigidBodySet,
@@ -13,7 +13,7 @@ pub struct PhysicsWorld {
     ccd_solver: CCDSolver,
     gravity: Vector3<f32>,
     integration_parameters: IntegrationParameters,
-    
+
     // Track our agent
     pub agent_handle: Option<RigidBodyHandle>,
 }
@@ -41,19 +41,19 @@ impl PhysicsWorld {
         // Create HeightField collider
         // Rapier expects DMatrix or similar for heightfield
         // We will construct it manually
-        
+
         // Scale: 1 unit = 1 meter
         let scale = Vector3::new(width as f32, 50.0, height as f32);
-        
+
         // Convert flat Vec to DMatrix (nalgebra)
         let heights = nalgebra::DMatrix::from_iterator(height, width, heightmap.iter().cloned());
-        
+
         let collider = ColliderBuilder::heightfield(heights, scale)
             .translation(vector![0.0, 0.0, 0.0])
             .build();
-            
+
         self.collider_set.insert(collider);
-        
+
         // Spawn Agent above the terrain
         self.spawn_agent(width as f32 / 2.0, height as f32 / 2.0);
     }
@@ -66,15 +66,16 @@ impl PhysicsWorld {
             .angular_damping(0.5)
             .additional_mass(70.0) // 70kg agent
             .build();
-            
+
         let collider = ColliderBuilder::capsule_y(0.9, 0.3) // 1.8m tall, 0.6m wide
             .restitution(0.0) // No bounce
             .friction(0.7)
             .build();
-            
+
         let handle = self.rigid_body_set.insert(rigid_body);
-        self.collider_set.insert_with_parent(collider, handle, &mut self.rigid_body_set);
-        
+        self.collider_set
+            .insert_with_parent(collider, handle, &mut self.rigid_body_set);
+
         self.agent_handle = Some(handle);
     }
 
@@ -88,7 +89,7 @@ impl PhysicsWorld {
                 body.apply_impulse(force, true);
             }
         }
-    
+
         self.physics_pipeline.step(
             &self.gravity,
             &self.integration_parameters,
@@ -104,7 +105,7 @@ impl PhysicsWorld {
             &(),
             &(),
         );
-        
+
         // Get agent state
         if let Some(handle) = self.agent_handle {
             let body = &self.rigid_body_set[handle];

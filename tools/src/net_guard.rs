@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::UdpSocket;
 use tokio::time::interval;
-use turbonet_core::ai_defense::{DefenseAdvisor, TrafficPacket, DecisionType, parse_model_spec};
+use turbonet_core::ai_defense::{parse_model_spec, DecisionType, DefenseAdvisor, TrafficPacket};
 use turbonet_core::neural_link::NeuralBus;
 
 #[tokio::main]
@@ -23,7 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match mode {
         "--run" => {
             let port = args.get(2).and_then(|p| p.parse().ok()).unwrap_or(8888);
-            let model = args.get(3).cloned().unwrap_or_else(|| "ollama:gpt-oss".to_string());
+            let model = args
+                .get(3)
+                .cloned()
+                .unwrap_or_else(|| "ollama:gpt-oss".to_string());
             run_guard(port, &model).await?;
         }
         _ => print_usage(&args[0]),
@@ -34,7 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn print_usage(prog: &str) {
     println!("Usage:");
-    println!("  {} --run [PORT] [MODEL]   Start active traffic guard", prog);
+    println!(
+        "  {} --run [PORT] [MODEL]   Start active traffic guard",
+        prog
+    );
 }
 
 async fn run_guard(port: u16, model_spec: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -45,16 +51,16 @@ async fn run_guard(port: u16, model_spec: &str) -> Result<(), Box<dyn std::error
     let advisor = match provider.as_str() {
         "ollama" => DefenseAdvisor::ollama(&model_name),
         "openai" => DefenseAdvisor::openai_compatible(
-             "https://api.openai.com/v1/chat/completions",
-             &model_name,
-             std::env::var("OPENAI_API_KEY").ok().as_deref(),
+            "https://api.openai.com/v1/chat/completions",
+            &model_name,
+            std::env::var("OPENAI_API_KEY").ok().as_deref(),
         ),
         _ => DefenseAdvisor::ollama(&model_name),
     };
 
     let blocked_ips: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
     let packet_buffer: Arc<Mutex<Vec<TrafficPacket>>> = Arc::new(Mutex::new(Vec::new()));
-    
+
     // Use Tokio's UdpSocket for async operations
     let socket = UdpSocket::bind(format!("0.0.0.0:{}", port)).await?;
     let blocked_clone = blocked_ips.clone();
@@ -82,7 +88,7 @@ async fn run_guard(port: u16, model_spec: &str) -> Result<(), Box<dyn std::error
                         let is_blocked = {
                             blocked_clone.lock().unwrap().contains(&src_ip)
                         };
-                        
+
                         if is_blocked {
                             continue;
                         }
@@ -152,6 +158,6 @@ async fn run_guard(port: u16, model_spec: &str) -> Result<(), Box<dyn std::error
             }
         }
     }
-    
+
     Ok(())
 }

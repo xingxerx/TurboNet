@@ -1,12 +1,12 @@
 use eframe::egui;
+use pqc_kyber::*;
+use socket2::{Domain, Socket, Type};
+use std::convert::TryInto;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::net::UdpSocket;
 use std::time::Duration;
-use pqc_kyber::*;
-use std::convert::TryInto;
-use socket2::{Socket, Domain, Type};
-use std::net::SocketAddr;
+use tokio::net::UdpSocket;
 
 #[allow(dead_code)]
 enum GuiUpdate {
@@ -164,7 +164,7 @@ impl eframe::App for MissionControlGui {
                 }
             });
             ui.add_space(20.0);
-            
+
             // v5.0 SETTINGS PANEL
             ui.group(|ui| {
                 ui.set_width(ui.available_width());
@@ -183,7 +183,7 @@ impl eframe::App for MissionControlGui {
                 }
             });
             ui.add_space(15.0);
-            
+
             ui.vertical_centered(|ui| {
                 ui.horizontal(|ui| {
                     ui.label("RECEIVER IP:");
@@ -198,7 +198,7 @@ impl eframe::App for MissionControlGui {
                     self.ai_status = "Initializing Quantum Blast...".to_string();
                     let file_path = self.file_path.clone();
                     let target_ip = self.target_ip.clone();
-                    
+
                     let (tx, rx) = std::sync::mpsc::channel();
                     self.update_rx = Some(rx);
                     let ctx_clone = ctx.clone();
@@ -256,7 +256,7 @@ impl eframe::App for MissionControlGui {
                                     return;
                                 }
                             };
-                            
+
                             send(GuiUpdate::Status("Encapsulating Secret...".to_string()));
                             let mut rng = rand::thread_rng();
                             let (_ct, shared_secret) = match encapsulate(&pk_buf, &mut rng) {
