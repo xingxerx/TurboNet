@@ -19,16 +19,30 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-  benchmarking:
-    name: Criterion Performance Audit
-    runs-on: windows-latest
+  build_and_test:
+    name: Rust Build & Test
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo Dependencies
+        uses: Swatinem/rust-cache@v2
+      - name: Check Formatting
+        run: cargo fmt -- --check
+      - name: Clippy Lint
+        run: cargo clippy -- -D warnings
+      - name: Run Tests
+        run: cargo test
+
+  benchmarking:
+    name: Criterion Performance Audit
+    runs-on: windows-latest
+
+    needs: build_and_test # Run benchmarks only if tests pass
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: Run Benchmark (CPU only if CUDA missing)
         run: cargo bench -- --nocapture
