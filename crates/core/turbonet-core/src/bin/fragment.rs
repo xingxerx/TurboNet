@@ -43,7 +43,7 @@ async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<DeepSeekWeights> {
         format: "json".to_string(),
     };
 
-    match tokio::time::timeout(
+    if let Ok(Ok(resp)) = tokio::time::timeout(
         std::time::Duration::from_millis(60000),
         client
             .post("http://localhost:11434/api/generate")
@@ -52,19 +52,16 @@ async fn get_ai_strategy(rtt_data: [f64; 3]) -> Option<DeepSeekWeights> {
     )
     .await
     {
-        Ok(Ok(resp)) => {
-            if let Ok(json_resp) = resp.json::<OllamaResponse>().await {
-                // Use robust parser from library
-                match DeepSeekWeights::from_raw_response(&json_resp.response) {
-                    Ok(weights) => {
-                        println!("🧠 DEEPSEEK THOUGHTS: Processed successfully.");
-                        return Some(weights);
-                    }
-                    Err(e) => println!("❌ PARSE ERROR: {}", e),
+        if let Ok(json_resp) = resp.json::<OllamaResponse>().await {
+            // Use robust parser from library
+            match DeepSeekWeights::from_raw_response(&json_resp.response) {
+                Ok(weights) => {
+                    println!("🧠 DEEPSEEK THOUGHTS: Processed successfully.");
+                    return Some(weights);
                 }
+                Err(e) => println!("❌ PARSE ERROR: {}", e),
             }
         }
-        _ => {}
     }
     None
 }
@@ -136,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
     });
     let total_len = file_bytes.len();
-    let total_blocks = (total_len + block_size - 1) / block_size;
+    let total_blocks = total_len.div_ceil(block_size);
 
     println!(
         "📦 STREAMING: {} bytes in {} blocks (BlockSize: {}MB)",
@@ -365,7 +362,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // TURBO: No delay, maximum transport
             } else if adaptive_mode {
                 // ADAPTIVE: Yield every 32 packets to saturate hardware without lockup
-                if chunk_count % 32 == 0 {
+                if chunk_count.is_multiple_of(32) {
                     tokio::task::yield_now().await;
                 }
             } else {
@@ -386,20 +383,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .send_to(end_packet, format!("{}:{}", target_ip, p1_port))
             .await?;
         let mut ack_buf = [0u8; 64];
-        match tokio::time::timeout(
+        if let Ok(Ok((n, _))) = tokio::time::timeout(
             std::time::Duration::from_millis(500),
             socket.recv_from(&mut ack_buf),
         )
         .await
         {
-            Ok(Ok((n, _))) => {
-                let msg = String::from_utf8_lossy(&ack_buf[..n]);
-                if msg.starts_with("END_ACK") {
-                    end_confirmed = true;
-                    println!("✅ RECEIVER CONFIRMED: All data received successfully!");
-                }
+            let msg = String::from_utf8_lossy(&ack_buf[..n]);
+            if msg.starts_with("END_ACK") {
+                end_confirmed = true;
+                println!("✅ RECEIVER CONFIRMED: All data received successfully!");
             }
-            _ => {}
         }
     }
 

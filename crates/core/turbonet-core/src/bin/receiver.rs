@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .find(|addr| addr.ip().is_ipv4() && !addr.ip().is_loopback())
         })
         .map(|addr| addr.ip().to_string())
-        .or_else(|| local_ipaddress::get())
+        .or_else(local_ipaddress::get)
         .unwrap_or_else(|| "0.0.0.0".to_string());
     println!(
         "📡 RECEIVER STACK ACTIVE: Listening on {}:{} {}:{} {}:{}",
@@ -143,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&output_filename)?;
         file.set_len(total_size as u64)?;
         let mut mmap = unsafe { MmapMut::map_mut(&file)? };
