@@ -174,28 +174,34 @@ pub struct TrafficPacket {
     pub payload_size: usize,
 }
 
+/// Passive threat classification for a source IP. This is detection-only;
+/// no variant here causes traffic to be dropped, blocked, or otherwise altered.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum DecisionType {
-    Allow,
-    Block,
-    Monitor,
+pub enum ThreatAssessment {
+    Benign,
+    Suspicious,
+    Malicious,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficDecision {
+pub struct TrafficAssessment {
     pub ip: String,
-    pub decision: DecisionType,
+    pub assessment: ThreatAssessment,
     pub confidence: u8,
     pub reason: String,
 }
 
 impl DefenseAdvisor {
-    /// Analyze a batch of traffic packets and return access control decisions
+    /// Analyze a batch of traffic packets and return passive threat assessments.
+    ///
+    /// This performs detection and classification only. The caller is expected to
+    /// log and surface these assessments; it must not use them to block or drop
+    /// traffic.
     pub async fn analyze_traffic_batch(
         &self,
         packets: &[TrafficPacket],
-    ) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<TrafficAssessment>, Box<dyn std::error::Error + Send + Sync>> {
         if packets.is_empty() {
             return Ok(vec![]);
         }
@@ -209,7 +215,7 @@ impl DefenseAdvisor {
         let packets_json = serde_json::to_string_pretty(packets).unwrap_or_default();
 
         format!(
-            r#"You are an automated network security analyst (Traffic Guard). Analyze this batch of network packets for malicious activity.
+            r#"You are a passive network security analyst (Traffic Monitor). Analyze this batch of network packets and classify the behavior of each source IP. This is detection and logging only — no traffic is blocked or altered.
 
 ## Traffic Batch
 ```json
@@ -218,17 +224,17 @@ impl DefenseAdvisor {
 
 ## Instructions
 1. Analyze the source IP behavior, ports, and payload contents.
-2. Look for: Port scanning, C2 beacons, SQL injection, buffer overflows, or unauthorized access attempts.
-3. Decide: ALLOW, BLOCK, or MONITOR (flag for review) for each unique Source IP.
-4. "payload_preview" is ASCII/Hex representation.
+2. Look for indicators of: port scanning, C2 beacons, SQL injection, buffer overflows, or unauthorized access attempts.
+3. Classify each unique Source IP as BENIGN, SUSPICIOUS, or MALICIOUS (for review/logging).
+4. "payload_preview" is an ASCII/Hex representation.
 
 ## Required Response Format
-Return a JSON array of decisions. Do NOT explain outside JSON.
+Return a JSON array of assessments. Do NOT explain outside JSON.
 ```json
 [
   {{
     "ip": "1.2.3.4",
-    "decision": "BLOCK",
+    "assessment": "MALICIOUS",
     "confidence": 90,
     "reason": "Repeated connection attempts to diverse ports (Scanning)"
   }}
@@ -241,22 +247,21 @@ Return a JSON array of decisions. Do NOT explain outside JSON.
     fn parse_traffic_response(
         &self,
         response: &str,
-    ) -> Result<Vec<TrafficDecision>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<TrafficAssessment>, Box<dyn std::error::Error + Send + Sync>> {
         // Try to extract JSON from response
         let json_start = response.find('[');
         let json_end = response.rfind(']');
 
         if let (Some(start), Some(end)) = (json_start, json_end) {
             let json_str = &response[start..=end];
-            if let Ok(decisions) = serde_json::from_str::<Vec<TrafficDecision>>(json_str) {
-                return Ok(decisions);
+            if let Ok(assessments) = serde_json::from_str::<Vec<TrafficAssessment>>(json_str) {
+                return Ok(assessments);
             }
         }
 
-        // Failure fallback - safe fail (allow all but log error)
-        // In a real system we might block-all on failure if paranoid
+        // Failure fallback: return no assessments and log the raw response.
         eprintln!(
-            "Failed to parse AI Traffic decision. Raw response: {}",
+            "Failed to parse AI traffic assessment. Raw response: {}",
             response
         );
         Ok(vec![])

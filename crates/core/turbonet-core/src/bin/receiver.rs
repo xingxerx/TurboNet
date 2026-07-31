@@ -3,13 +3,13 @@ use memmap2::MmapMut;
 use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::OpenOptions;
-pub struct GhostReassembler {
+pub struct LaneReassembler {
     pub total_size: usize,
     pub weights: [u64; 3],
     pub salt: u64,
 }
 
-impl GhostReassembler {
+impl LaneReassembler {
     pub fn reassemble(&self, b24: &[u8], b5g1: &[u8], b5g2: &[u8]) -> Vec<u8> {
         let mut output = Vec::with_capacity(self.total_size);
         let w_total: u64 = self.weights.iter().sum();
@@ -153,7 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lane_packets: [u64; 3] = [0, 0, 0];
         let transfer_start = std::time::Instant::now();
         println!(
-            "🚀 BLAST START: Expecting {} bytes (Multi-Lane Zero-Copy Mode)...",
+            "🚀 TRANSPORT START: Expecting {} bytes (Multi-Lane Zero-Copy Mode)...",
             total_size
         );
 
