@@ -1,164 +1,128 @@
-# ⚠️ LEGAL WARNING
+# 🛰️ TurboNet: Post-Quantum AI Multipath Transport (v0.2)
 
-**TurboNet is a security research framework intended for authorized penetration testing and educational use only.**
+**TurboNet** is a software suite for ultra-fast, ultra-secure data transport. It
+combines **GPU-accelerated data fragmentation** with **Post-Quantum
+Cryptography** and an **AI reasoning engine** to move data across multiple
+physical network lanes with an encrypted, quantum-resistant handshake.
 
--   **Authorization Required**: You must have explicit written permission from the network owner before using any offensive capabilities (e.g., "Quantum Blast", "Packet Shredding", "WiFi Deauth").
--   **Compliance**: Users are responsible for complying with all applicable local, state, and federal laws (e.g., CFAA in the US, GDPR in Europe).
--   **Liability**: The authors and contributors are not liable for any misuse or damage caused by this software.
-
----
-
-# 🛰️ TurboNet: Post-Quantum AI Network Shredder (v4.0)
-
-**TurboNet** is a state-of-the-art software suite designed for ultra-secure, AI-optimized data fragmentation. It bridges **GPU-accelerated shredding** with **Post-Quantum Cryptography** and an **AI Reasoning Engine** to create an un-interceptable data stream across multiple physical network bands.
+This repository is the defensible transport core. Offensive intrusion/evasion
+tooling that previously lived here has been removed; the remaining components are
+the multipath transport, its cryptography and CUDA core, passive analysis
+utilities, and a **passive** AI defense advisor.
 
 ---
 
 ## 🏗️ Architecture & Tech Stack
 
-TurboNet is built on a **Dual-AI Architecture**, separating strategic optimization from tactical defense.
+TurboNet separates strategic transport optimization from passive traffic
+analysis.
 
-### 🧠 The Dual-Brain System
+### 🧠 AI Assistance
 1.  **Strategic Engine (DeepSeek-R1)**:
-    *   **Role**: Network Optimization & Shredding Logic.
-    *   **Location**: `src/deepseek_weights.rs` & `mission_control`.
-    *   **Function**: Analyzes real-time lane congestion (RTT/Packet Loss) to calculate optimal `w0, w1, w2` shredding weights.
-    *   **Config**: Controlled via `OLLAMA_MODEL` env var.
+    *   **Role**: Network optimization & fragmentation weighting.
+    *   **Location**: `src/deepseek_weights.rs`.
+    *   **Function**: Analyzes real-time lane congestion (RTT / packet loss) to
+        calculate optimal `w0, w1, w2` fragmentation weights.
+    *   **Config**: Controlled via the `OLLAMA_MODEL` env var.
 
-2.  **Tactical Engine (GPT-OSS)**:
-    *   **Role**: Unsupervised Traffic Analysis & Active Defense.
+2.  **Passive Analyst (GPT-OSS)**:
+    *   **Role**: Detection-only traffic analysis and defense recommendations.
     *   **Location**: `turbonet-core/src/ai_defense.rs` & `tools/src/net_guard.rs`.
-    *   **Function**: Analyzes captured UDP/TCP payloads for anomalies (SQLi, beacons) to enforce blocking rules.
+    *   **Function**: Classifies captured UDP payloads as benign / suspicious /
+        malicious and logs the result. **It never blocks or drops traffic.**
     *   **Config**: Controlled via CLI args (`--model ollama:gpt-oss`).
 
 ### 🛠️ Core Technology
--   **System**: Rust (2021 Edition) + Tokio (Async Runtime).
--   **Compute**: CUDA 13.0 (NVIDIA GPU Acceleration).
--   **Security**: `pqc_kyber` (Post-Quantum Key Exchange) + AES-256-GCM.
--   **GUI**: `egui` (Immediate Mode, OpenGL backend).
+-   **System**: Rust (2021 Edition) + Tokio (async runtime).
+-   **Compute**: CUDA (NVIDIA GPU acceleration, optional — see below).
+-   **Security**: `pqc_kyber` (post-quantum key exchange) + AES-256-GCM.
+-   **GUI**: `egui` (immediate mode).
 
 ---
 
-## � Core Modules
+## 🧩 Core Modules
 
-### 1. Quantum Ghost (Level 9)
-*Directory: `src/crypto.rs` / `src/bin/receiver.rs`*
-Implements the **Harvest Now, Decrypt Later** resistance mechanism. Uses **ML-KEM (Kyber-768)** to derive a 256-bit AES session key. This handshake occurs *out-of-band* or pre-shared if configured, ensuring the key is never exposed to quantum listeners on the data lanes.
+### 1. Post-Quantum Handshake
+*Files: `src/crypto.rs` / `src/bin/receiver.rs`*
+Provides **Harvest-Now-Decrypt-Later** resistance using **ML-KEM (Kyber-768)** to
+derive a 256-bit AES session key, so the key is never exposed to quantum
+listeners on the data lanes.
 
-### 2. Neural Strategist (Level 8)
-*Directory: `src/shredder.rs` / `src/bin/mission_control.rs`*
-The "Planner". It connects to your local Ollama instance running **DeepSeek-R1**. It queries the model with network telemetry ("Lane 1: 50ms, Lane 2: 200ms") and applies the returned weights to the GPU Kernel.
+### 2. Multipath Fragmentation
+*Files: `src/fragment.rs` / `fragment.cu`*
+Splits a payload across multiple UDP lanes using AI-derived weights and a
+GPU kernel (`fragment_kernel`), reassembled on the receiver.
 
-### 3. Cyber Sentinel (Level 11)
-*Directory: `tools/src/net_guard.rs` / `turbonet-core`*
-The "Enforcer". An independent agent that sits on the edge network. It uses **GPT-OSS** (like `llama3` or `gpt-4o`) to classify raw hex streams. It implements a user-space firewall that silently drops packets from IP addresses flagged by the LLM.
+### 3. Passive Traffic Monitor
+*Files: `tools/src/net_guard.rs` / `turbonet-core/src/ai_defense.rs`*
+An independent agent that observes traffic and uses an LLM to classify raw
+streams. It **logs** suspicious and malicious source IPs for review and updates a
+telemetry bus. It performs **no blocking, dropping, or filtering**.
 
 ---
 
-
-## 🚦 How to Run the Suite
-
-> **Important:** For full GPU and network performance, always run TurboNet natively on Windows. WSL2 is not recommended for production use due to limited hardware passthrough and routing issues.
-
+## 🚦 Building & Running
 
 ### 1. Prerequisites
--   **Hardware**: Windows PC with an NVIDIA GPU and multiple network interfaces.
--   **Software**: Rust (Cargo), CUDA Toolkit, and [Ollama](https://ollama.com/) (running `deepseek-r1:8b`).
+-   **Software**: Rust (Cargo). Optional: CUDA Toolkit for GPU acceleration and
+    [Ollama](https://ollama.com/) for the AI features.
 
-### 2. Install the TurboNet CLI (Recommended)
-To run the `turbonet` command globally:
-```bash
-cargo install --path turbonet-core
-```
-*This allows you to run `turbonet guard` from any terminal.*
-
-
-### 3. Launch the Ghost Receiver
-The receiver must be running first to generate the lattice keypair and listen for fragments.
-```bash
-# You must provide the expected total size in bytes (logged by the sender)
-./target/release/receiver.exe <TOTAL_BYTES>
-```
-
-
-### 4. Launch Mission Control (The Controller)
-Open the GUI dashboard to manage the mission. **Run this from Windows PowerShell or Command Prompt, not WSL.**
-```powershell
-cd D:\TurboNet
-cargo clean
-cargo build --release --bin mission_control
-$env:OLLAMA_MODEL="deepseek-r1:8b"
-./target/release/mission_control.exe
-```
-
----
-
-### ⚠️ WSL2/X11 Troubleshooting (Advanced)
-If you must run the GUI from WSL2, set your DISPLAY to the Windows host bridge IP:
+### 2. Build
 
 ```bash
-grep nameserver /etc/resolv.conf | awk '{print $2}'
-export DISPLAY=YOUR_NAMESERVER_IP:0.0
-export LIBGL_ALWAYS_SOFTWARE=1
-cargo run --release --bin mission_control --
+cargo build --release
 ```
-> **Note:** WSL2 will not provide full GPU or network performance. CUDA and 2.5Gbps Ethernet are only available natively on Windows.
 
----
+**CUDA gating:** the GPU kernel is compiled by `build.rs` via `nvcc`. If the
+pre-compiled `crates/core/turbonet-core/fragment.ptx` is present, the build skips
+`nvcc` entirely. To force-skip the CUDA compilation step, set
+`TURBONET_NO_CUDA=1`. The workspace builds without a CUDA toolkit installed.
 
-## 🏢 Government & Compliance (Modules)
-TurboNet includes modules specifically designed for authorized government and defense sectors, adhering to strict compliance and auditing standards.
+### 3. Run the receiver
+The receiver generates the lattice keypair and listens for fragments.
+```bash
+cargo run -p turbonet-core --bin receiver -- <TOTAL_BYTES>
+```
 
-### 🛡️ Cyber Sentinel (`crates/cybersecurity/sentinel`)
--   **Security Clearance**: Level 11
--   **Function**: Autonomous Active Defense & Traffic Filtering.
--   **Compliance**: Implements standard blocking rules and logs all neutralizing actions for audit trails.
--   **Use Case**: perimeter defense for sensitive infrastructure.
+### 4. Run the sender (fragmenter)
+```bash
+cargo run -p turbonet-core --bin fragment --
+```
 
-### 📜 Operations (`turbonet_ops`)
--   **Standard**: ISO/IEC 27001 & NIST 800-53 compatiable workflows.
--   **Auditing**: Automated Snyk security scans and Criterion performance benchmarking.
+### 5. Run the passive traffic monitor
+```bash
+cargo run -p turbonet-core --bin turbonet -- guard start --port 8888 --model ollama:gpt-oss
+```
 
 ---
 
 ## 📂 Project Structure
 
-The codebase is organized into modular crates for security isolation and maintainability:
-
 ### 🧱 Core (`crates/core`)
--   `turbonet-core`: The heart of the system. Contains the `Brain` (DeepSeek-R1 logic), `Shredder` (GPU Kernels), `Crypto` (Kyber/AES), and the main `Mission Control` GUI.
+-   `turbonet-core`: the heart of the system — the fragmenter (GPU kernels),
+    crypto (Kyber/AES), the passive AI defense advisor, and the GUI.
 
 ### 📡 WiFi (`crates/wifi`)
--   `wifi-recon`: Quantum-ready WiFi scanning and analysis tools (`quantum_hound`).
-
-### ⚔️ Pentesting (`crates/pentesting`)
--   `spectre`: Advanced polymorphic payload generator and quantum threat analyzer.
-
-### 🛡️ Cybersecurity (`crates/cybersecurity`)
--   `sentinel`: AI-driven active defense and packet inspection algorithms.
+-   `wifi-recon`: passive interface / network scanning (`wifi-scan`).
 
 ### 🛠️ Utilities (`crates/utils`)
--   `tools`: General purpose networking and diagnostic tools.
+-   `tools`: general-purpose networking and analysis tools (PE parser, string
+    extraction, UDP sniffer, passive net-guard monitor).
 
 ---
 
-## 📝 All Command-Line Invocations
-
-You can run the main binaries using Cargo as follows (paths updated for new structure):
+## 📝 Command-Line Invocations
 
 ```bash
-# Run the Ghost Receiver
+# Receiver
 cargo run -p turbonet-core --bin receiver -- <TOTAL_BYTES>
 
-# Run Mission Control (GUI Controller)
-cargo run -p turbonet-core --bin mission_control --
+# Sender / fragmenter
+cargo run -p turbonet-core --bin fragment --
 
-# Run the Legacy Command-Line Shredder
-cargo run -p turbonet-core --bin shred --
-
-# Run the AI Traffic Guard
+# Passive AI traffic monitor
 cargo run -p turbonet-core --bin turbonet -- guard start --port 8888 --model ollama:gpt-oss
-```
 
----
-**The Mission is now complete. The Ghost is in the Lattice.** 🫡⚛️🧠🏁🏆
+# AI defense advisor (analyze scan findings, get hardening recommendations)
+cargo run -p turbonet-core --bin turbonet -- defend --demo
+```

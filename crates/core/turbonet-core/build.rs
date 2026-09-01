@@ -1,6 +1,5 @@
 fn main() {
-    println!("cargo:rerun-if-changed=shredder.cu");
-    println!("cargo:rerun-if-changed=spectre.cu");
+    println!("cargo:rerun-if-changed=fragment.cu");
 
     // Allow skipping CUDA build if TURBONET_NO_CUDA is set
     if std::env::var("TURBONET_NO_CUDA").is_ok() {
@@ -8,16 +7,13 @@ fn main() {
         return;
     }
 
-    // Skip CUDA build if PTX files already exist (pre-compiled)
-    let shredder_exists = std::path::Path::new("shredder.ptx").exists();
-    let spectre_exists = std::path::Path::new("spectre.ptx").exists();
-
-    if shredder_exists && spectre_exists {
-        // Both already compiled
+    // Skip CUDA build if PTX file already exists (pre-compiled)
+    let fragment_exists = std::path::Path::new("fragment.ptx").exists();
+    if fragment_exists {
         return;
     }
 
-    // Compile shredder.cu to shredder.ptx using nvcc
+    // Compile fragment.cu to fragment.ptx using nvcc
     // On Windows, check if cl.exe is in PATH before running nvcc
     #[cfg(windows)]
     {
@@ -53,24 +49,12 @@ See CUDA_BUILD_LINUX_MAC.md for details.\n"
         }
     }
 
-    // Compile CUDA kernels to PTX using nvcc
-    if !shredder_exists {
-        let status = std::process::Command::new("nvcc")
-            .args(["-ptx", "shredder.cu", "-o", "shredder.ptx"])
-            .status()
-            .expect("Failed to compile shredder.cu");
-        if !status.success() {
-            panic!("nvcc failed for shredder.cu with status: {}", status);
-        }
-    }
-
-    if !spectre_exists {
-        let status = std::process::Command::new("nvcc")
-            .args(["-ptx", "spectre.cu", "-o", "spectre.ptx"])
-            .status()
-            .expect("Failed to compile spectre.cu");
-        if !status.success() {
-            panic!("nvcc failed for spectre.cu with status: {}", status);
-        }
+    // Compile CUDA kernel to PTX using nvcc
+    let status = std::process::Command::new("nvcc")
+        .args(["-ptx", "fragment.cu", "-o", "fragment.ptx"])
+        .status()
+        .expect("Failed to compile fragment.cu");
+    if !status.success() {
+        panic!("nvcc failed for fragment.cu with status: {}", status);
     }
 }

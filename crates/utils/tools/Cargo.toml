@@ -23,16 +23,6 @@ path = "src/strings_extract.rs"
 name = "net-sniffer"
 path = "src/net_sniffer.rs"
 
-
-[[bin]]
-name = "beacon-gen"
-path = "src/beacon_gen.rs"
-
 [[bin]]
 name = "net-guard"
 path = "src/net_guard.rs"
-
-
-[[bin]]
-name = "attacker"
-path = "src/attacker.rs"

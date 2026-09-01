@@ -1,5 +1,5 @@
 @echo off
-REM Compile SPECTRE CUDA kernels
+REM Compile TurboNet CUDA kernels
 REM Run this from an x64 Native Tools Command Prompt OR it will set up VS env
 
 where cl.exe >nul 2>&1
@@ -14,10 +14,10 @@ if %ERRORLEVEL% NEQ 0 (
     )
 )
 
-echo Compiling spectre.cu...
-nvcc -ptx spectre.cu -o spectre.ptx
+echo Compiling fragment.cu...
+nvcc -ptx crates\core\turbonet-core\fragment.cu -o crates\core\turbonet-core\fragment.ptx
 if %ERRORLEVEL% EQU 0 (
-    echo SUCCESS: spectre.ptx created
+    echo SUCCESS: fragment.ptx created
 ) else (
     echo FAILED: Check CUDA installation
     exit /b 1

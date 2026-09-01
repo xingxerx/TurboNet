@@ -27,9 +27,9 @@ pub struct MissionControlGui {
     ai_status: String,
     current_block: usize,
     total_blocks: usize,
-    is_blasting: bool,
+    is_transmitting: bool,
     ai_weights: Option<(u64, u64, u64)>,
-    blast_error: Option<String>,
+    transmit_error: Option<String>,
     update_rx: Option<std::sync::mpsc::Receiver<GuiUpdate>>,
     // v5.0 Settings
     chunk_size: usize,
@@ -47,9 +47,9 @@ impl Clone for MissionControlGui {
             ai_status: self.ai_status.clone(),
             current_block: self.current_block,
             total_blocks: self.total_blocks,
-            is_blasting: self.is_blasting,
+            is_transmitting: self.is_transmitting,
             ai_weights: self.ai_weights,
-            blast_error: self.blast_error.clone(),
+            transmit_error: self.transmit_error.clone(),
             update_rx: None, // Receiver cannot be cloned
             chunk_size: self.chunk_size,
             turbo_mode: self.turbo_mode,
@@ -68,9 +68,9 @@ impl Default for MissionControlGui {
             ai_status: "Awaiting Command...".to_string(),
             current_block: 0,
             total_blocks: 0,
-            is_blasting: false,
+            is_transmitting: false,
             ai_weights: None,
-            blast_error: None,
+            transmit_error: None,
             update_rx: None,
             // v5.0 Settings
             chunk_size: 1400,
@@ -97,12 +97,12 @@ impl eframe::App for MissionControlGui {
                         self.total_blocks = total;
                     }
                     GuiUpdate::Error(e) => {
-                        self.blast_error = Some(e);
-                        self.is_blasting = false;
+                        self.transmit_error = Some(e);
+                        self.is_transmitting = false;
                         finished = true;
                     }
                     GuiUpdate::Finished => {
-                        self.is_blasting = false;
+                        self.is_transmitting = false;
                         finished = true;
                     }
                 }
@@ -159,7 +159,7 @@ impl eframe::App for MissionControlGui {
                 if let Some((w0, w1, w2)) = &self.ai_weights {
                     ui.label(format!("Lattice Decision: {}% | {}% | {}%", w0, w1, w2));
                 }
-                if let Some(err) = &self.blast_error {
+                if let Some(err) = &self.transmit_error {
                     ui.label(egui::RichText::new(format!("❌ ERROR: {}", err)).color(egui::Color32::RED));
                 }
             });
@@ -190,12 +190,12 @@ impl eframe::App for MissionControlGui {
                     ui.text_edit_singleline(&mut self.target_ip);
                 });
                 ui.add_space(15.0);
-                let btn_text = if self.is_blasting { "🌊 STREAMING..." } else { "🚀 INITIATE QUANTUM BLAST" };
-                let btn = ui.add_enabled(!self.is_blasting && self.file_path.is_some(), egui::Button::new(egui::RichText::new(btn_text).size(24.0).strong()));
+                let btn_text = if self.is_transmitting { "🌊 STREAMING..." } else { "🚀 INITIATE QUANTUM TRANSPORT" };
+                let btn = ui.add_enabled(!self.is_transmitting && self.file_path.is_some(), egui::Button::new(egui::RichText::new(btn_text).size(24.0).strong()));
                 if btn.clicked() {
-                    self.is_blasting = true;
-                    self.blast_error = None;
-                    self.ai_status = "Initializing Quantum Blast...".to_string();
+                    self.is_transmitting = true;
+                    self.transmit_error = None;
+                    self.ai_status = "Initializing Quantum Transport...".to_string();
                     let file_path = self.file_path.clone();
                     let target_ip = self.target_ip.clone();
 
@@ -330,12 +330,12 @@ impl eframe::App for MissionControlGui {
                     });
                 }
                 ui.add_space(10.0);
-                if ui.add_enabled(self.is_blasting, egui::Button::new(egui::RichText::new("🛑 STOP").size(20.0).color(egui::Color32::RED))).clicked() {
-                    self.is_blasting = false;
+                if ui.add_enabled(self.is_transmitting, egui::Button::new(egui::RichText::new("🛑 STOP").size(20.0).color(egui::Color32::RED))).clicked() {
+                    self.is_transmitting = false;
                     self.update_rx = None;
-                    self.ai_status = "Blast aborted.".to_string();
+                    self.ai_status = "Transport aborted.".to_string();
                 }
-                if self.is_blasting {
+                if self.is_transmitting {
                     let prog = self.current_block as f32 / self.total_blocks.max(1) as f32;
                     ui.add(egui::ProgressBar::new(prog).text(format!("Block {} / {}", self.current_block, self.total_blocks)).animate(true));
                 }
